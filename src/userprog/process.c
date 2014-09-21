@@ -28,7 +28,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy, *fn_end;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -36,7 +36,11 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy, file_name, PGSIZE)
+
+  /* 첫 번째 공백 전까지를 실행 파일 이름으로 합니다. */
+  for (fn_end = fn_copy; fn_end && fn_end != ' '; fn_end++);
+  *fn_end = 0;
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
