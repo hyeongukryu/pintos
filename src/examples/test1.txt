@@ -1,0 +1,39 @@
+
+echo:     file format elf32-i386
+
+Sections:
+Idx Name          Size      VMA       LMA       File off  Algn
+  0 .text         00001c63  080480a0  080480a0  000000a0  2**4
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+  1 .rodata       00000250  08049d04  08049d04  00001d04  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  2 .rodata.str1.1 000001e1  08049f54  08049f54  00001f54  2**0
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  3 .rodata.str1.4 000000e8  0804a138  0804a138  00002138  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  4 .data         00000018  0804b220  0804b220  00002220  2**2
+                  CONTENTS, ALLOC, LOAD, DATA
+  5 .bss          00000001  0804b238  0804b238  00002238  2**2
+                  ALLOC
+  6 .comment      0000002b  00000000  00000000  00002238  2**0
+                  CONTENTS, READONLY
+  7 .debug_aranges 00000120  00000000  00000000  00002263  2**0
+                  CONTENTS, READONLY, DEBUGGING
+  8 .debug_pubnames 00000343  00000000  00000000  00002383  2**0
+                  CONTENTS, READONLY, DEBUGGING
+  9 .debug_info   00002131  00000000  00000000  000026c6  2**0
+                  CONTENTS, READONLY, DEBUGGING
+ 10 .debug_abbrev 00000a0f  00000000  00000000  000047f7  2**0
+                  CONTENTS, READONLY, DEBUGGING
+ 11 .debug_line   00000838  00000000  00000000  00005206  2**0
+                  CONTENTS, READONLY, DEBUGGING
+ 12 .debug_frame  000009c8  00000000  00000000  00005a40  2**2
+                  CONTENTS, READONLY, DEBUGGING
+ 13 .debug_str    000006cc  00000000  00000000  00006408  2**0
+                  CONTENTS, READONLY, DEBUGGING
+ 14 .debug_loc    00002085  00000000  00000000  00006ad4  2**0
+                  CONTENTS, READONLY, DEBUGGING
+ 15 .debug_pubtypes 000001e4  00000000  00000000  00008b59  2**0
+                  CONTENTS, READONLY, DEBUGGING
+ 16 .debug_ranges 000000c0  00000000  00000000  00008d3d  2**0
+                  CONTENTS, READONLY, DEBUGGING
