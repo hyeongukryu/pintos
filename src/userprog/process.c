@@ -21,12 +21,29 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+static void
+parse_arguments (char *cmd)
+{
+  int *argc, *length;
+  char prev = 0;
+  argc = (int *)cmd - 2;
+  length = (int *)cmd - 1;
+
+  for (; *cmd; prev = *(cmd++), (*length)++)
+    {
+      if (*cmd == ' ')
+        *cmd = 0;
+      *argc += !prev && *cmd;
+      *length -= !prev && !*cmd;
+    }
+}
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmd) 
 {
   char *fn_copy;
   tid_t tid;
@@ -36,14 +53,45 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  fn_copy = (char *)((int *)fn_copy + 2);
+  strlcpy (fn_copy, cmd, PGSIZE - sizeof(int) * 2);
+
+  parse_arguments (fn_copy);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (fn_copy, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page ((int *)fn_copy - 2); 
   return tid;
 }
+
+static void
+argument_stack (char *cmd, void **esp)
+{
+  int length, argc;
+  char *args_base, **argv_base;
+
+  length = ((int *)cmd)[-1];
+  argc = ((int *)cmd)[-2];
+
+  *esp = args_base = (char *)*esp - (length + 1);
+  argv_base = (char **)*esp - (argc + 1);
+  *esp = argv_base = (char **)((unsigned int)argv_base - (unsigned int)argv_base % 4);
+  *(char ***)(*esp = (char ***)*esp - 1) = argv_base;
+  *(int *)(*esp = (int *)*esp - 1) = argc;
+  *(int *)(*esp = (int *)*esp - 1) = 0;
+  
+  while (argc--)
+    {
+      for (; !*cmd; cmd++);
+      *(argv_base++) = args_base;
+      for (; *cmd; *args_base = *cmd, args_base++, cmd++);
+      *args_base = 0;
+      args_base++;      
+    }
+  *argv_base = 0;
+}
+
 
 /* A thread function that loads a user process and starts it
    running. */
@@ -54,7 +102,7 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  /* Initialize interrupt frame and load executable. */
+  /* Initialize interrupt rame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
@@ -62,9 +110,16 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
   if (!success) 
-    thread_exit ();
+    {
+      palloc_free_page ((int *)file_name - 2);
+      thread_exit ();
+    }
+
+  argument_stack (file_name, &if_.esp);
+
+  palloc_free_page ((int *)file_name - 2);
+  hex_dump (if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
