@@ -21,20 +21,24 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-static void
-parse_arguments (char *cmd)
+struct cmd_line
 {
-  int *argc, *length;
-  char prev = 0;
-  argc = (int *)cmd - 2;
-  length = (int *)cmd - 1;
+  int length, argc;
+  char cmd[0];
+};
 
-  for (; *cmd; prev = *(cmd++), (*length)++)
+static void
+parse_arguments (struct cmd_line *cmdline)
+{
+  char prev = 0, *cmd = cmdline->cmd;
+  cmdline->argc = cmdline->length = 0;
+
+  for (; *cmd; prev = *(cmd++), cmdline->length++)
     {
       if (*cmd == ' ')
         *cmd = 0;
-      *argc += !prev && *cmd;
-      *length -= !prev && !*cmd;
+      cmdline->argc += !prev && *cmd;
+      cmdline->length -= !prev && !*cmd;
     }
 }
 
@@ -43,38 +47,37 @@ parse_arguments (char *cmd)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *cmd) 
+process_execute (const char *cmd)
 {
-  char *fn_copy;
+  struct cmd_line *cmdline;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  cmdline = palloc_get_page (0);
+  if (cmdline == NULL)
     return TID_ERROR;
-  fn_copy = (char *)((int *)fn_copy + 2);
-  strlcpy (fn_copy, cmd, PGSIZE - sizeof(int) * 2);
+  strlcpy (cmdline->cmd, cmd, PGSIZE - sizeof(int) * 2);
 
-  parse_arguments (fn_copy);
+  parse_arguments (cmdline);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (fn_copy, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (cmdline->cmd, PRI_DEFAULT, start_process, cmdline);
   if (tid == TID_ERROR)
-    palloc_free_page ((int *)fn_copy - 2); 
+    palloc_free_page (cmdline); 
   return tid;
 }
 
 static void
-argument_stack (char *cmd, void **esp)
+argument_stack (struct cmd_line *cmdline, void **esp)
 {
-  int length, argc;
-  char *args_base, **argv_base;
+  int argc;  
+  char *args_base, **argv_base, *cmd;
 
-  length = ((int *)cmd)[-1];
-  argc = ((int *)cmd)[-2];
+  argc = cmdline->argc;
+  cmd = cmdline->cmd;
 
-  *esp = args_base = (char *)*esp - (length + 1);
+  *esp = args_base = (char *)*esp - (cmdline->length + 1);
   argv_base = (char **)*esp - (argc + 1);
   *esp = argv_base = (char **)((unsigned int)argv_base - (unsigned int)argv_base % 4);
   *(char ***)(*esp = (char ***)*esp - 1) = argv_base;
@@ -96,29 +99,31 @@ argument_stack (char *cmd, void **esp)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *aux)
 {
-  char *file_name = file_name_;
+  struct cmd_line *cmdline;
   struct intr_frame if_;
   bool success;
+
+  cmdline = aux;
 
   /* Initialize interrupt rame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (cmdline->cmd, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   if (!success) 
     {
-      palloc_free_page ((int *)file_name - 2);
+      palloc_free_page (cmdline);
       thread_exit ();
     }
 
-  argument_stack (file_name, &if_.esp);
+  argument_stack (cmdline, &if_.esp);
 
-  palloc_free_page ((int *)file_name - 2);
+  palloc_free_page (cmdline);
   hex_dump (if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* Start the user process by simulating a return from an
