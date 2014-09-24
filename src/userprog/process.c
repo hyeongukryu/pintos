@@ -57,7 +57,7 @@ process_execute (const char *cmd)
   cmdline = palloc_get_page (0);
   if (cmdline == NULL)
     return TID_ERROR;
-  strlcpy (cmdline->cmd, cmd, PGSIZE - sizeof(int) * 2);
+  strlcpy (cmdline->cmd, cmd, PGSIZE - sizeof (struct cmd_line));
 
   parse_arguments (cmdline);
 
