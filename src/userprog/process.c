@@ -21,15 +21,19 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+// 명령 행의 길이와 인자의 개수, 구분자가 널 문자로 설정된 명령 행을 나타냅니다.
 struct CmdLine
 {
   int length, argc;
   char cmd[0];
 };
 
+// 명령 행의 길이과 인자의 개수를 계산하고, 명령 행의 모든 구분자를 널 문자로 바꿉니다.
+// 명령 행을 널로 종결되는 통상적인 문자열로 취급할 경우 그것은 첫 번째 인수를 나타냅니다.
 static void
 parse_arguments (struct CmdLine *cmdline)
 {
+  // prev 변수는 명령 행 파싱 중에 이전 문자를 저장하고 있습니다.
   char prev = 0, *cmd = cmdline->cmd;
   cmdline->argc = cmdline->length = 0;
 
@@ -68,6 +72,8 @@ process_execute (const char *cmd)
   return tid;
 }
 
+
+// 주어진 명령 행 정보와 추가적으로 필요한 정보들을 스택에 기록합니다.
 static void
 argument_stack (struct CmdLine *cmdline, void **esp)
 {
