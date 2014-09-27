@@ -21,14 +21,14 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-struct cmd_line
+struct CmdLine
 {
   int length, argc;
   char cmd[0];
 };
 
 static void
-parse_arguments (struct cmd_line *cmdline)
+parse_arguments (struct CmdLine *cmdline)
 {
   char prev = 0, *cmd = cmdline->cmd;
   cmdline->argc = cmdline->length = 0;
@@ -49,7 +49,7 @@ parse_arguments (struct cmd_line *cmdline)
 tid_t
 process_execute (const char *cmd)
 {
-  struct cmd_line *cmdline;
+  struct CmdLine *cmdline;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -57,7 +57,7 @@ process_execute (const char *cmd)
   cmdline = palloc_get_page (0);
   if (cmdline == NULL)
     return TID_ERROR;
-  strlcpy (cmdline->cmd, cmd, PGSIZE - sizeof (struct cmd_line));
+  strlcpy (cmdline->cmd, cmd, PGSIZE - sizeof (struct CmdLine));
 
   parse_arguments (cmdline);
 
@@ -69,7 +69,7 @@ process_execute (const char *cmd)
 }
 
 static void
-argument_stack (struct cmd_line *cmdline, void **esp)
+argument_stack (struct CmdLine *cmdline, void **esp)
 {
   int argc;  
   char *args_base, **argv_base, *cmd;
@@ -101,7 +101,7 @@ argument_stack (struct cmd_line *cmdline, void **esp)
 static void
 start_process (void *aux)
 {
-  struct cmd_line *cmdline;
+  struct CmdLine *cmdline;
   struct intr_frame if_;
   bool success;
 
