@@ -130,7 +130,6 @@ start_process (void *aux)
   argument_stack (cmdline, &if_.esp);
 
   palloc_free_page (cmdline);
-  hex_dump (if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -154,7 +153,13 @@ start_process (void *aux)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  // 테스트 결과를 볼 수 있도록 하는 임시 방편
+  int volatile i, j;
+  for (i = 0; i < 2000000; i++)
+    j++;
+
+  // 지금은 항상 정상적으로 종료된 것처럼 합니다.
+  return 0;
 }
 
 /* Free the current process's resources. */
