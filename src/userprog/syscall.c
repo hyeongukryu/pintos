@@ -40,7 +40,7 @@ check_address4 (void *addr)
   check_address (addr + 3);
 }
 
-static void
+static inline void
 get_arguments (int32_t *esp, int32_t *args, int count)
 {
   ASSERT (1 <= count && count <= 4);
@@ -51,13 +51,13 @@ get_arguments (int32_t *esp, int32_t *args, int count)
   }
 }
 
-static void
+static inline void
 check_user_string (const char *str)
 {
   for (; check_address ((void *)str), *str; str++);
 }
 
-static char *
+static inline char *
 get_user_string (const char *str)
 {
   int size = strlen (str) + 1;
@@ -77,7 +77,7 @@ get_user_string (const char *str)
   }\
 } while (0)
 
-static void
+static inline void
 free_user_strings (char **args, int flag)
 {
   ASSERT (0 <= flag && flag <= 0b1111);
@@ -105,7 +105,7 @@ free_user_strings (char **args, int flag)
   } \
 } while (0)
 
-static void 
+static inline void 
 get_user_strings (char **args, int flag)
 {
   ASSERT (0 <= flag && flag <= 0b1111);
@@ -124,26 +124,25 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   int32_t args[4];
-  int32_t *esp = f->esp;
-  check_address4(esp);
+  check_address4(f->esp);
 
-  switch (*esp)
+  switch (*f->esp)
   {
     case SYS_HALT:
       halt ();
       break;
     case SYS_EXIT:
-      get_arguments (esp, args, 1);
+      get_arguments (f->esp, args, 1);
       exit (args[0]);
       break;
     case SYS_CREATE:
-      get_arguments (esp, args, 2);
+      get_arguments (f->esp, args, 2);
       get_user_strings ((char **)args, 0b1000);
       f->eax = create ((const char *)args[0], args[1]);
 	  free_user_strings ((char **)args, 0b1000);
       break;
     case SYS_REMOVE:
-      get_arguments (esp, args, 1);
+      get_arguments (f->esp, args, 1);
       get_user_strings ((char **)args, 0b1000);
       f->eax = remove ((const char *)args[0]);
       free_user_strings ((char **)args, 0b1000); 
@@ -164,7 +163,7 @@ syscall_handler (struct intr_frame *f)
     case SYS_READDIR:
     case SYS_ISDIR: 
     case SYS_INUMBER:
-      printf("NotImplemented: %d\n", *esp);
+      printf("NotImplemented: %d\n", *f->esp);
     default:
       exit(-1);
   }
