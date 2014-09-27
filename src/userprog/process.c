@@ -21,15 +21,19 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-struct cmd_line
+// 명령 행의 길이와 인자의 개수, 구분자가 널 문자로 설정된 명령 행을 나타냅니다.
+struct CmdLine
 {
   int length, argc;
   char cmd[0];
 };
 
+// 명령 행의 길이과 인자의 개수를 계산하고, 명령 행의 모든 구분자를 널 문자로 바꿉니다.
+// 명령 행을 널로 종결되는 통상적인 문자열로 취급할 경우 그것은 첫 번째 인수를 나타냅니다.
 static void
-parse_arguments (struct cmd_line *cmdline)
+parse_arguments (struct CmdLine *cmdline)
 {
+  // prev 변수는 명령 행 파싱 중에 이전 문자를 저장하고 있습니다.
   char prev = 0, *cmd = cmdline->cmd;
   cmdline->argc = cmdline->length = 0;
 
@@ -49,7 +53,7 @@ parse_arguments (struct cmd_line *cmdline)
 tid_t
 process_execute (const char *cmd)
 {
-  struct cmd_line *cmdline;
+  struct CmdLine *cmdline;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -57,7 +61,7 @@ process_execute (const char *cmd)
   cmdline = palloc_get_page (0);
   if (cmdline == NULL)
     return TID_ERROR;
-  strlcpy (cmdline->cmd, cmd, PGSIZE - sizeof (struct cmd_line));
+  strlcpy (cmdline->cmd, cmd, PGSIZE - sizeof (struct CmdLine));
 
   parse_arguments (cmdline);
 
@@ -68,8 +72,10 @@ process_execute (const char *cmd)
   return tid;
 }
 
+
+// 주어진 명령 행 정보와 추가적으로 필요한 정보들을 스택에 기록합니다.
 static void
-argument_stack (struct cmd_line *cmdline, void **esp)
+argument_stack (struct CmdLine *cmdline, void **esp)
 {
   int argc;  
   char *args_base, **argv_base, *cmd;
@@ -101,7 +107,7 @@ argument_stack (struct cmd_line *cmdline, void **esp)
 static void
 start_process (void *aux)
 {
-  struct cmd_line *cmdline;
+  struct CmdLine *cmdline;
   struct intr_frame if_;
   bool success;
 
@@ -124,7 +130,6 @@ start_process (void *aux)
   argument_stack (cmdline, &if_.esp);
 
   palloc_free_page (cmdline);
-  hex_dump (if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -148,7 +153,13 @@ start_process (void *aux)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  // 테스트 결과를 볼 수 있도록 하는 임시 방편
+  int volatile i, j;
+  for (i = 0; i < 2000000; i++)
+    j++;
+
+  // 지금은 항상 정상적으로 종료된 것처럼 합니다.
+  return 0;
 }
 
 /* Free the current process's resources. */

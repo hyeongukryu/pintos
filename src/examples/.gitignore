@@ -16,4 +16,7 @@ insult
 lineup
 matmult
 recursor
+create
+*.o
 *.d
+libc.a
