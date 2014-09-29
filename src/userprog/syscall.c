@@ -112,7 +112,7 @@ get_single_user_string (char **args, int flag, int index)
         }
     }
 }
-pagedir_mapped
+
 // 플래그가 맞을 때 사용자 문자열의 유효성을 확인합니다.
 // 유효하지 않으면 종료합니다.
 static inline void
