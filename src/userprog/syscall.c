@@ -73,6 +73,7 @@ get_user_string (const char *str)
   return buffer;
 }
 
+// 플래그가 맞을 때 동적 할당된 문자열을 해제하고 널 포인터를 대입합니다.
 #define free_single_user_string(args, flag, index) do { \
   if (flag & (0b1000 >> index)) \
   { \
@@ -92,6 +93,9 @@ free_user_strings (char **args, int flag)
   free_single_user_string(args, flag, 3);
 }
 
+// 플래그에 맞을 때 사용자 문자열을 복사합니다.
+// 작업 중 실패하면 내용을 되돌리고 종료합니다.
+// 유효성을 검증한 다음 이 작업을 실행해야 합니다.
 #define get_single_user_string(args, flag, index) do { \
   if (flag & (0b1000 >> index)) \
   { \
@@ -104,6 +108,8 @@ free_user_strings (char **args, int flag)
   } \
 } while (0)
 
+// 플래그가 맞을 때 사용자 문자열의 유효성을 확인합니다.
+// 유효하지 않으면 종료합니다.
 #define check_single_user_string(args, flag, index) do { \
   if (flag & (0b1000 >> index)) { \
     check_user_string (args[index]); \
@@ -125,7 +131,6 @@ get_user_strings (char **args, int flag)
   get_single_user_string(args, flag, 2);
   get_single_user_string(args, flag, 3);
 }
-
 
 static void
 syscall_handler (struct intr_frame *f) 
