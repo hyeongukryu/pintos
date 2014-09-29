@@ -17,6 +17,7 @@ lineup
 matmult
 recursor
 create
+create-fault
 *.o
 *.d
 libc.a
