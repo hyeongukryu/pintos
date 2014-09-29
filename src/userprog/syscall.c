@@ -17,6 +17,7 @@ static void halt (void);
 static void exit (int);
 static bool create (const char *file, unsigned initial_size);
 static bool remove (const char *file);
+static int write (int, const void *, unsigned);
 
 void
 syscall_init (void)
@@ -24,7 +25,7 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-// 주소 addr이 유저 모드 주소가 아니면 프로세스를 종료합니다.
+// 주소 addr이 유효한 유저 모드 주소가 아니면 프로세스를 종료합니다.
 // 시스템 콜을 안전하게 수행하기 위하여 사용합니다.
 static inline void
 check_address (void *addr)
@@ -111,7 +112,7 @@ get_single_user_string (char **args, int flag, int index)
         }
     }
 }
-
+pagedir_mapped
 // 플래그가 맞을 때 사용자 문자열의 유효성을 확인합니다.
 // 유효하지 않으면 종료합니다.
 static inline void
@@ -156,7 +157,7 @@ syscall_handler (struct intr_frame *f)
         get_arguments (f->esp, args, 2);
         get_user_strings ((char **)args, 0b1000);
         f->eax = create ((const char *)args[0], args[1]);
-  	  free_user_strings ((char **)args, 0b1000);
+  	    free_user_strings ((char **)args, 0b1000);
         break;
       case SYS_REMOVE:
         get_arguments (f->esp, args, 1);
@@ -164,12 +165,17 @@ syscall_handler (struct intr_frame *f)
         f->eax = remove ((const char *)args[0]);
         free_user_strings ((char **)args, 0b1000); 
         break;
+      case SYS_WRITE:
+        get_arguments (f->esp, args, 3);
+        get_user_strings ((char **)args, 0b0100);
+        f->eax = write((int)args[0], (const void *)args[1], (unsigned)args[2]);
+        free_user_strings ((char **)args, 0b0100);
+        break;
       case SYS_EXEC:
       case SYS_WAIT:
       case SYS_OPEN:
       case SYS_FILESIZE:
       case SYS_READ:
-      case SYS_WRITE:
       case SYS_SEEK:
       case SYS_TELL:
       case SYS_CLOSE:
@@ -213,3 +219,13 @@ remove (const char *file)
 {
   return filesys_remove (file);
 }
+
+static int
+write (int fd, const void *buffer, unsigned size)
+{
+  if (fd != 1)
+    return 0;
+  putbuf(buffer, size);
+  return size;
+}
+
