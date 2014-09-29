@@ -29,6 +29,7 @@ syscall_init (void)
 static inline void
 check_address (void *addr)
 {
+  // TODO: 가상 메모리를 고려합니다.
   if ((is_user_vaddr (addr) && addr >= (void *)0x08048000UL) == false)
     exit (-1);
 }
@@ -40,6 +41,7 @@ check_address4 (void *addr)
   check_address (addr + 3);
 }
 
+// 4바이트 인자를 1개에서 4개 사이에서 가져옵니다.
 static inline void
 get_arguments (int32_t *esp, int32_t *args, int count)
 {
@@ -51,12 +53,14 @@ get_arguments (int32_t *esp, int32_t *args, int count)
   }
 }
 
+// 사용자 문자열의 유효성을 확인합니다.
 static inline void
 check_user_string (const char *str)
 {
   for (; check_address ((void *)str), *str; str++);
 }
 
+// 사용자 문자열을 가져옵니다. 새로운 메모리를 동적 할당합니다.
 static inline char *
 get_user_string (const char *str)
 {
@@ -74,9 +78,10 @@ get_user_string (const char *str)
   { \
     free (args[index]); \
     args[index] = 0; \
-  }\
+  } \
 } while (0)
 
+// 플래그의 마지막 4비트 설정에 따라서 문자열들을 해제합니다.
 static inline void
 free_user_strings (char **args, int flag)
 {
@@ -96,7 +101,7 @@ free_user_strings (char **args, int flag)
       free_user_strings (args, flag & (0b11110000 >> index)); \
       exit(-1); \
     } \
-  } \  
+  } \
 } while (0)
 
 #define check_single_user_string(args, flag, index) do { \
@@ -105,6 +110,8 @@ free_user_strings (char **args, int flag)
   } \
 } while (0)
 
+// 플래그의 마지막 4비트에 따라서 사용자 문자열을 확인하고 가져옵니다.
+// 새로운 메모리를 동적 할당합니다. 
 static inline void 
 get_user_strings (char **args, int flag)
 {
@@ -126,7 +133,7 @@ syscall_handler (struct intr_frame *f)
   int32_t args[4];
   check_address4(f->esp);
 
-  switch (*f->esp)
+  switch (*(int *)f->esp)
   {
     case SYS_HALT:
       halt ();
@@ -163,8 +170,10 @@ syscall_handler (struct intr_frame *f)
     case SYS_READDIR:
     case SYS_ISDIR: 
     case SYS_INUMBER:
-      printf("NotImplemented: %d\n", *f->esp);
+      // 시스템 콜 번호는 유효하나 아직 구현되지 않았습니다.
+      printf("NotImplemented: %d\n", *(int *)f->esp);
     default:
+      // 시스템 콜 번호가 유효하지 않습니다.
       exit(-1);
   }
 }
@@ -178,6 +187,7 @@ halt (void)
 static void
 exit (int status)
 {
+  // TODO: 종료 상태 코드를 기록할 수 있게 하는 메커니즘이 필요합니다.
   printf ("%s: exit(%d)\n", thread_name (), status);
   thread_exit ();
 }
