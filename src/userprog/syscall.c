@@ -24,7 +24,7 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-// 주소 addr이 유저 모드 주소가 아니면 프로세스를 종료합니다.
+// 주소 addr이 유효한 유저 모드 주소가 아니면 프로세스를 종료합니다.
 // 시스템 콜을 안전하게 수행하기 위하여 사용합니다.
 static inline void
 check_address (void *addr)
