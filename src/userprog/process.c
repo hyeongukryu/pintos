@@ -109,19 +109,22 @@ start_process (void *aux)
 {
   struct CmdLine *cmdline;
   struct intr_frame if_;
-  bool success;
+  struct thread *t;
 
   cmdline = aux;
+  t = thread_current ();
 
   /* Initialize interrupt rame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (cmdline->cmd, &if_.eip, &if_.esp);
+  t->load_succeeded = load (cmdline->cmd, &if_.eip, &if_.esp);
+
+  sema_up (&t->load_sema);
 
   /* If load failed, quit. */
-  if (!success) 
+  if (!t->load_succeeded) 
     {
       palloc_free_page (cmdline);
       thread_exit ();
@@ -141,6 +144,24 @@ start_process (void *aux)
   NOT_REACHED ();
 }
 
+// 현재 스레드의 자식 스레드 중 pid가 일치하는 것을 찾습니다.
+// 그러한 스레드가 없다면 NULL을 반환합니다.
+struct thread *
+get_child_process (pid_t pid)
+{
+  struct list_elem *e;
+  for (e = list_begin (&thread_current ()->child_list);
+       e != list_end (&thread_current ()->child_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, child_elem);
+      if (t->pid == pid)
+        return t;
+    }
+  return NULL;
+}
+
+
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a
@@ -151,15 +172,17 @@ start_process (void *aux)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid)
 {
-  // 테스트 결과를 볼 수 있도록 하는 임시 방편
-  int volatile i, j;
-  for (i = 0; i < 2000000; i++)
-    j++;
-
-  // 지금은 항상 정상적으로 종료된 것처럼 합니다.
-  return 0;
+  struct thread *child;
+  int exit_status;
+  if (!(child = get_child_process(child_tid)))
+    return -1;
+  sema_down (child->wait_sema);
+  list_remove (&child->child_elem);
+  exit_status = child->exit_status;
+  sema_up (child->destroy_sema);
+  return exit_status;
 }
 
 /* Free the current process's resources. */

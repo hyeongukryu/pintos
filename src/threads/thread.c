@@ -184,6 +184,9 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
+  // 현재 프로세스의 자식 프로세스 목록에 새 프로세스를 추가합니다.
+  list_push_back (&thread_current ()->child_list, &t->child_elem);
+
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
@@ -288,11 +291,29 @@ thread_tid (void)
 void
 thread_exit (void) 
 {
+  struct list_elem *child;
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
   process_exit ();
 #endif
+
+  // 지금까지 이 프로세스가 wait하지 않은 모든 자식 프로세스가
+  // 이 프로세스와 상관없이 종료될 수 있도록 합니다.
+  for (child = list_begin (&thread_current ()->child_list);
+       child != list_end (&thread_current ()->child_list);
+       child = list_next (child))
+    {
+      struct thread *t = list_entry (e, struct thread, child_elem);
+      sema_up (child->destroy_sema);
+    }
+
+  // 부모 프로세스의 wait를 재개할 수 있도록 합니다.
+  sema_up (&thread_current ()->wait_sema);
+  
+  // 부모 프로세스의 wait 완료 또는 부모 프로세스의 종료가
+  // 일어나기를 기다립니다.
+  sema_down (&thread_current ()->destroy_sema);
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
@@ -470,6 +491,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+
+  // 세마포어 초기화
+  sema_init (&t->wait_sema);
+  sema_init (&t->destroy_sema);
+  sema_init (&t->load_sema);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

@@ -15,9 +15,11 @@ static void syscall_handler (struct intr_frame *);
 // 이 함수들은 포인터가 가리키는 값에 안전하게 접근할 수 있다고 가정합니다.
 static void halt (void);
 static void exit (int);
-static bool create (const char *file, unsigned initial_size);
-static bool remove (const char *file);
+static bool create (const char *, unsigned);
+static bool remove (const char *);
 static int write (int, const void *, unsigned);
+static pid_t exec (const char *);
+static int wait (pid_t);
 
 void
 syscall_init (void)
@@ -142,9 +144,9 @@ static void
 syscall_handler (struct intr_frame *f)
 {
   int32_t args[4];
-  check_address4(f->esp);
+  check_address4 (f->esp);
 
-  switch (*(int *)f->esp)
+  switch (*(int *) f->esp)
     {
       case SYS_HALT:
         halt ();
@@ -155,24 +157,32 @@ syscall_handler (struct intr_frame *f)
         break;
       case SYS_CREATE:
         get_arguments (f->esp, args, 2);
-        get_user_strings ((char **)args, 0b1000);
-        f->eax = create ((const char *)args[0], args[1]);
-  	    free_user_strings ((char **)args, 0b1000);
+        get_user_strings ((char **) args, 0b1000);
+        f->eax = create ((const char *) args[0], args[1]);
+  	    free_user_strings ((char **) args, 0b1000);
         break;
       case SYS_REMOVE:
         get_arguments (f->esp, args, 1);
-        get_user_strings ((char **)args, 0b1000);
-        f->eax = remove ((const char *)args[0]);
-        free_user_strings ((char **)args, 0b1000); 
+        get_user_strings ((char **) args, 0b1000);
+        f->eax = remove ((const char *) args[0]);
+        free_user_strings ((char **) args, 0b1000); 
         break;
       case SYS_WRITE:
         get_arguments (f->esp, args, 3);
-        get_user_strings ((char **)args, 0b0100);
-        f->eax = write((int)args[0], (const void *)args[1], (unsigned)args[2]);
-        free_user_strings ((char **)args, 0b0100);
+        get_user_strings ((char **) args, 0b0100);
+        f->eax = write ((int) args[0], (const void *) args[1], (unsigned) args[2]);
+        free_user_strings ((char **) args, 0b0100);
         break;
       case SYS_EXEC:
+        get_arguments (f->esp, args, 1);
+        get_user_strings ((char **) args, 0b1000);
+        f->eax = exec ((const char *) args[0]);
+        free_user_strings ((char **) args, 0b1000);
+        break;
       case SYS_WAIT:
+        get_arguments (f->esp, args, 1);
+        f->eax = wait ((pit_t) args[0]);
+        break;
       case SYS_OPEN:
       case SYS_FILESIZE:
       case SYS_READ:
@@ -203,7 +213,7 @@ halt (void)
 static void
 exit (int status)
 {
-  // TODO: 종료 상태 코드를 기록할 수 있게 하는 메커니즘이 필요합니다.
+  thread_current ()->exit_status = status;
   printf ("%s: exit(%d)\n", thread_name (), status);
   thread_exit ();
 }
@@ -225,7 +235,31 @@ write (int fd, const void *buffer, unsigned size)
 {
   if (fd != 1)
     return 0;
-  putbuf(buffer, size);
+  putbuf (buffer, size);
   return size;
 }
 
+static pid_t
+exec (const char *file)
+{
+  tid_t tid;
+  struct thread *child;
+
+  if ((tid = process_execute (file)) == TID_ERROR)
+    return TID_ERROR;
+
+  child = get_child_process (tid);
+  ASSERT (child);
+
+  sema_down (&child->load_semaphore);
+  if (!child->load_succeeded)
+    return TID_ERROR;
+
+  return tid;
+}
+
+static int
+wait (pid_t pid)
+{
+  return process_wait (pid);
+}
