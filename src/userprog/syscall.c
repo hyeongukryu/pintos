@@ -33,8 +33,8 @@ syscall_init (void)
 static inline void
 check_address (void *addr)
 {
-  // TODO: 가상 메모리를 고려합니다.
-  if ((is_user_vaddr (addr) && addr >= (void *)0x08048000UL) == false)
+  if ((is_user_vaddr (addr) && addr >= (void *)0x08048000UL &&
+       pagedir_get_page (thread_current ()->pagedir, addr)) == false)
     exit (-1);
 }
 
