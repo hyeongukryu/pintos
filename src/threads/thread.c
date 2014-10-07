@@ -304,8 +304,8 @@ thread_exit (void)
        child != list_end (&thread_current ()->child_list);
        child = list_next (child))
     {
-      struct thread *t = list_entry (e, struct thread, child_elem);
-      sema_up (child->destroy_sema);
+      struct thread *t = list_entry (child, struct thread, child_elem);
+      sema_up (&t->destroy_sema);
     }
 
   // 부모 프로세스의 wait를 재개할 수 있도록 합니다.
@@ -493,9 +493,11 @@ init_thread (struct thread *t, const char *name, int priority)
   list_push_back (&all_list, &t->allelem);
 
   // 세마포어 초기화
-  sema_init (&t->wait_sema);
-  sema_init (&t->destroy_sema);
-  sema_init (&t->load_sema);
+  sema_init (&t->wait_sema, 0);
+  sema_init (&t->destroy_sema, 0);
+  sema_init (&t->load_sema, 0);
+
+  list_init (&t->child_list);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
