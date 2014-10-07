@@ -144,24 +144,6 @@ start_process (void *aux)
   NOT_REACHED ();
 }
 
-// 현재 스레드의 자식 스레드 중 pid가 일치하는 것을 찾습니다.
-// 그러한 스레드가 없다면 NULL을 반환합니다.
-struct thread *
-get_child_process (pid_t pid)
-{
-  struct list_elem *e;
-  for (e = list_begin (&thread_current ()->child_list);
-       e != list_end (&thread_current ()->child_list);
-       e = list_next (e))
-    {
-      struct thread *t = list_entry (e, struct thread, child_elem);
-      if (t->pid == pid)
-        return t;
-    }
-  return NULL;
-}
-
-
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a

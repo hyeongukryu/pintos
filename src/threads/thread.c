@@ -215,6 +215,23 @@ thread_create (const char *name, int priority,
   return tid;
 }
 
+// 현재 스레드의 자식 스레드 중 tid가 일치하는 것을 찾습니다.
+// 그러한 스레드가 없다면 NULL을 반환합니다.
+struct thread *
+thread_get_child (tid_t tid)
+{
+  struct list_elem *e;
+  for (e = list_begin (&thread_current ()->child_list);
+       e != list_end (&thread_current ()->child_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, child_elem);
+      if (t->pid == tid)
+        return t;
+    }
+  return NULL;
+}
+
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
