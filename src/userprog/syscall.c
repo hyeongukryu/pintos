@@ -18,7 +18,7 @@ static void exit (int);
 static bool create (const char *, unsigned);
 static bool remove (const char *);
 static int write (int, const void *, unsigned);
-static pit_t exec (const char *);
+static pid_t exec (const char *);
 static int wait (pid_t);
 
 void
@@ -33,7 +33,7 @@ static inline void
 check_address (void *addr)
 {
   // TODO: 가상 메모리를 고려합니다.
-  if ((is_user_vaddr (addr) && addr >= (void *) 0x08048000UL) == false)
+  if ((is_user_vaddr (addr) && addr >= (void *)0x08048000UL) == false)
     exit (-1);
 }
 
@@ -60,7 +60,7 @@ get_arguments (int32_t *esp, int32_t *args, int count)
 static inline void
 check_user_string (const char *str)
 {
-  for (; check_address ((void *) str), *str; str++);
+  for (; check_address ((void *)str), *str; str++);
 }
 
 // 사용자 문자열을 가져옵니다. 새로운 메모리를 동적 할당합니다.
@@ -177,10 +177,11 @@ syscall_handler (struct intr_frame *f)
         get_arguments (f->esp, args, 1);
         get_user_strings ((char **) args, 0b1000);
         f->eax = exec ((const char *) args[0]);
+        free_user_strings ((char **) args, 0b1000);
         break;
       case SYS_WAIT:
-        get_argumetns (f->esp, args, 1);
-        f->eax = wait ((pid_t) args[0]);
+        get_arguments (f->esp, args, 1);
+        f->eax = wait ((pit_t) args[0]);
         break;
       case SYS_OPEN:
       case SYS_FILESIZE:
@@ -212,7 +213,6 @@ halt (void)
 static void
 exit (int status)
 {
-  /* 종료 상태 기록 */
   thread_current ()->exit_status = status;
   printf ("%s: exit(%d)\n", thread_name (), status);
   thread_exit ();
@@ -235,30 +235,31 @@ write (int fd, const void *buffer, unsigned size)
 {
   if (fd != 1)
     return 0;
-  putbuf(buffer, size);
+  putbuf (buffer, size);
   return size;
 }
 
 static pid_t
 exec (const char *file)
 {
-  tid_t tid = TID_ERROR;
-  struct thread *child = NULL;
+  tid_t tid;
+  struct thread *child;
 
-  /* 프로세스를 생성합니다. */
   if ((tid = process_execute (file)) == TID_ERROR)
     return TID_ERROR;
 
-  /* 적재를 대기합니다. */
+  child = get_child_process (tid);
+  ASSERT (child);
+
   sema_down (&child->load_semaphore);
   if (!child->load_succeeded)
     return TID_ERROR;
 
+  return tid;
 }
 
 static int
 wait (pid_t pid)
 {
-  return process_wait(pid);
+  return process_wait (pid);
 }
-

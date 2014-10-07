@@ -98,25 +98,30 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
-    /* 부모 프로세스 */
-    struct thread *parent;
+    // 부모의 자식 리스트에 들어가는 원소입니다.
+    struct list_elem child_elem;
 
-    /* 부모 프로세스의 자식 리스트에 들어가는 원소 */
-    struct list_elem child_list_elem;
-    /* 이 프로세스의 자식 리스트 */
+    // 현재 스레드의 자식 스레드 리스트입니다.
+    // 오직 이 스레드만이 리스트를 변경하므로, 동기화하지 않아도 됩니다.
     struct list child_list;
 
-    /* 종료 코드 */
+    // 종료 상태를 나타냅니다.
     int exit_status;
-    /* 적재 성공 여부 */
+
+    // 이 프로세스가 종료되려고 하면 증가합니다.
+    // 이 프로세스의 종료를 "대기"하는 쪽에서 감소시킵니다.
+    struct semaphore wait_sema;
+
+    // 이 프로세스를 제거할 수 있게 되면 증가합니다.
+    // 이 프로세스가 "제거"되기 직전에 감소시킵니다.
+    struct semaphore destroy_sema;
+
+    // 적재 성공 여부입니다.
     bool load_succeeded;
 
-    /* 적재 세마포어 */
+    // 적재가 완료되면 증가합니다.
+    // 부모 프로세스의 exec에서 감소시킵니다.
     struct semaphore load_sema;
-    /* 종료 세마포어. 실습 자료의 종료 세마포어와 다릅니다. */
-    struct semaphore exit_sema;
-    /* 대기 세마포어 */
-    struct semaphore wait_sema;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

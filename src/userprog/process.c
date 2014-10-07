@@ -121,18 +121,15 @@ start_process (void *aux)
   if_.eflags = FLAG_IF | FLAG_MBS;
   t->load_succeeded = load (cmdline->cmd, &if_.eip, &if_.esp);
 
-  /* 적재 완료를 대기하고 있던 프로세스를 재개할 수 있도록 합니다. */
-  sema_up (&t->load_semaphore);
+  sema_up (&t->load_sema);
 
   /* If load failed, quit. */
   if (!t->load_succeeded) 
     {
       palloc_free_page (cmdline);
       thread_exit ();
-      NOT_REACHED ();
     }
 
-  /* 스택에 인자를 넣습니다. */
   argument_stack (cmdline, &if_.esp);
 
   palloc_free_page (cmdline);
@@ -147,7 +144,23 @@ start_process (void *aux)
   NOT_REACHED ();
 }
 
-struct thread
+// 현재 스레드의 자식 스레드 중 pid가 일치하는 것을 찾습니다.
+// 그러한 스레드가 없다면 NULL을 반환합니다.
+struct thread *
+get_child_process (pid_t pid)
+{
+  struct list_elem *e;
+  for (e = list_begin (&thread_current ()->child_list);
+       e != list_end (&thread_current ()->child_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, child_elem);
+      if (t->pid == pid)
+        return t;
+    }
+  return NULL;
+}
+
 
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
@@ -159,18 +172,17 @@ struct thread
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid) 
+process_wait (tid_t child_tid)
 {
-  struct thread *child = NULL;
-  if (!child)
+  struct thread *child;
+  int exit_status;
+  if (!(child = get_child_process(child_tid)))
     return -1;
-
-  /* 자식 프로세스가 종료 직전 상태가 되기를 기다립니다. */ 
-  sema_down (child->wait_semaphore);
-  /* 자식 프로세스를 완전히 제거할 수 있게 합니다. */
-  sema_up (child->exit_semaphore);
-  
-  return child->exit_status;  
+  sema_down (child->wait_sema);
+  list_remove (&child->child_elem);
+  exit_status = child->exit_status;
+  sema_up (child->destroy_sema);
+  return exit_status;
 }
 
 /* Free the current process's resources. */
