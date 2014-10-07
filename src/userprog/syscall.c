@@ -7,6 +7,7 @@
 #include "devices/shutdown.h"
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
+#include "process.h"
 #include <string.h>
 
 static void syscall_handler (struct intr_frame *);
@@ -18,8 +19,8 @@ static void exit (int);
 static bool create (const char *, unsigned);
 static bool remove (const char *);
 static int write (int, const void *, unsigned);
-static pid_t exec (const char *);
-static int wait (pid_t);
+static tid_t exec (const char *);
+static int wait (tid_t);
 
 void
 syscall_init (void)
@@ -181,7 +182,7 @@ syscall_handler (struct intr_frame *f)
         break;
       case SYS_WAIT:
         get_arguments (f->esp, args, 1);
-        f->eax = wait ((pit_t) args[0]);
+        f->eax = wait ((tid_t) args[0]);
         break;
       case SYS_OPEN:
       case SYS_FILESIZE:
@@ -239,7 +240,7 @@ write (int fd, const void *buffer, unsigned size)
   return size;
 }
 
-static pid_t
+static tid_t
 exec (const char *file)
 {
   tid_t tid;
@@ -248,10 +249,10 @@ exec (const char *file)
   if ((tid = process_execute (file)) == TID_ERROR)
     return TID_ERROR;
 
-  child = get_child_process (tid);
+  child = thread_get_child (tid);
   ASSERT (child);
 
-  sema_down (&child->load_semaphore);
+  sema_down (&child->load_sema);
   if (!child->load_succeeded)
     return TID_ERROR;
 
@@ -259,7 +260,7 @@ exec (const char *file)
 }
 
 static int
-wait (pid_t pid)
+wait (tid_t tid)
 {
-  return process_wait (pid);
+  return process_wait (tid);
 }

@@ -226,7 +226,7 @@ thread_get_child (tid_t tid)
        e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, child_elem);
-      if (t->pid == tid)
+      if (t->tid == tid)
         return t;
     }
   return NULL;

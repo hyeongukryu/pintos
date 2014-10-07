@@ -158,12 +158,12 @@ process_wait (tid_t child_tid)
 {
   struct thread *child;
   int exit_status;
-  if (!(child = get_child_process(child_tid)))
+  if (!(child = thread_get_child(child_tid)))
     return -1;
-  sema_down (child->wait_sema);
+  sema_down (&child->wait_sema);
   list_remove (&child->child_elem);
   exit_status = child->exit_status;
-  sema_up (child->destroy_sema);
+  sema_up (&child->destroy_sema);
   return exit_status;
 }
 
