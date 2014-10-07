@@ -15,9 +15,11 @@ static void syscall_handler (struct intr_frame *);
 // 이 함수들은 포인터가 가리키는 값에 안전하게 접근할 수 있다고 가정합니다.
 static void halt (void);
 static void exit (int);
-static bool create (const char *file, unsigned initial_size);
-static bool remove (const char *file);
+static bool create (const char *, unsigned);
+static bool remove (const char *);
 static int write (int, const void *, unsigned);
+static pit_t exec (const char *);
+static int wait (pid_t);
 
 void
 syscall_init (void)
@@ -31,7 +33,7 @@ static inline void
 check_address (void *addr)
 {
   // TODO: 가상 메모리를 고려합니다.
-  if ((is_user_vaddr (addr) && addr >= (void *)0x08048000UL) == false)
+  if ((is_user_vaddr (addr) && addr >= (void *) 0x08048000UL) == false)
     exit (-1);
 }
 
@@ -58,7 +60,7 @@ get_arguments (int32_t *esp, int32_t *args, int count)
 static inline void
 check_user_string (const char *str)
 {
-  for (; check_address ((void *)str), *str; str++);
+  for (; check_address ((void *) str), *str; str++);
 }
 
 // 사용자 문자열을 가져옵니다. 새로운 메모리를 동적 할당합니다.
@@ -142,9 +144,9 @@ static void
 syscall_handler (struct intr_frame *f)
 {
   int32_t args[4];
-  check_address4(f->esp);
+  check_address4 (f->esp);
 
-  switch (*(int *)f->esp)
+  switch (*(int *) f->esp)
     {
       case SYS_HALT:
         halt ();
@@ -155,24 +157,31 @@ syscall_handler (struct intr_frame *f)
         break;
       case SYS_CREATE:
         get_arguments (f->esp, args, 2);
-        get_user_strings ((char **)args, 0b1000);
-        f->eax = create ((const char *)args[0], args[1]);
-  	    free_user_strings ((char **)args, 0b1000);
+        get_user_strings ((char **) args, 0b1000);
+        f->eax = create ((const char *) args[0], args[1]);
+  	    free_user_strings ((char **) args, 0b1000);
         break;
       case SYS_REMOVE:
         get_arguments (f->esp, args, 1);
-        get_user_strings ((char **)args, 0b1000);
-        f->eax = remove ((const char *)args[0]);
-        free_user_strings ((char **)args, 0b1000); 
+        get_user_strings ((char **) args, 0b1000);
+        f->eax = remove ((const char *) args[0]);
+        free_user_strings ((char **) args, 0b1000); 
         break;
       case SYS_WRITE:
         get_arguments (f->esp, args, 3);
-        get_user_strings ((char **)args, 0b0100);
-        f->eax = write((int)args[0], (const void *)args[1], (unsigned)args[2]);
-        free_user_strings ((char **)args, 0b0100);
+        get_user_strings ((char **) args, 0b0100);
+        f->eax = write ((int) args[0], (const void *) args[1], (unsigned) args[2]);
+        free_user_strings ((char **) args, 0b0100);
         break;
       case SYS_EXEC:
+        get_arguments (f->esp, args, 1);
+        get_user_strings ((char **) args, 0b1000);
+        f->eax = exec ((const char *) args[0]);
+        break;
       case SYS_WAIT:
+        get_argumetns (f->esp, args, 1);
+        f->eax = wait ((pid_t) args[0]);
+        break;
       case SYS_OPEN:
       case SYS_FILESIZE:
       case SYS_READ:
@@ -203,7 +212,8 @@ halt (void)
 static void
 exit (int status)
 {
-  // TODO: 종료 상태 코드를 기록할 수 있게 하는 메커니즘이 필요합니다.
+  /* 종료 상태 기록 */
+  thread_current ()->exit_status = status;
   printf ("%s: exit(%d)\n", thread_name (), status);
   thread_exit ();
 }
@@ -227,5 +237,28 @@ write (int fd, const void *buffer, unsigned size)
     return 0;
   putbuf(buffer, size);
   return size;
+}
+
+static pid_t
+exec (const char *file)
+{
+  tid_t tid = TID_ERROR;
+  struct thread *child = NULL;
+
+  /* 프로세스를 생성합니다. */
+  if ((tid = process_execute (file)) == TID_ERROR)
+    return TID_ERROR;
+
+  /* 적재를 대기합니다. */
+  sema_down (&child->load_semaphore);
+  if (!child->load_succeeded)
+    return TID_ERROR;
+
+}
+
+static int
+wait (pid_t pid)
+{
+  return process_wait(pid);
 }
 

@@ -206,6 +206,16 @@ thread_create (const char *name, int priority,
 
   intr_set_level (old_level);
 
+  /* 현재 프로세스를 부모 프로세스로 합니다. */
+  t->parent = thread_current ();
+  /* 아직 적재 과정이 시작되지 않았습니다. */
+  t->load_succeeded = false;
+  /* 세마포어 초기 설정 */
+  sema_init (&t->exit_semaphore, 0);
+  sema_init (&t->load_semaphore, 0);
+  /* 이 프로세스의 자식 리스트에 새 프로세스를 추가합니다. */
+  list_push_back (&t->parent->child_list, &t->child_list_elem);
+
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -294,12 +304,20 @@ thread_exit (void)
   process_exit ();
 #endif
 
+  /* 부모 프로세스가 대기 중이라면 재개할 수 있게 합니다. */
+  sema_up (&thread_current ()->wait_semaphore);
+  /* 부모 프로세스가 종료 또는 wait 완료를 기다립니다. */
+  sema_down (&thread_current ()->exit_semaphore);
+
+  /* 이제 종료할 수 있습니다. */
+
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
+
   schedule ();
   NOT_REACHED ();
 }
@@ -470,6 +488,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+
+  /* 자식 리스트 초기화 */
+  list_init (t->child_list);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

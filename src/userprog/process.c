@@ -109,24 +109,30 @@ start_process (void *aux)
 {
   struct CmdLine *cmdline;
   struct intr_frame if_;
-  bool success;
+  struct thread *t;
 
   cmdline = aux;
+  t = thread_current ();
 
   /* Initialize interrupt rame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (cmdline->cmd, &if_.eip, &if_.esp);
+  t->load_succeeded = load (cmdline->cmd, &if_.eip, &if_.esp);
+
+  /* 적재 완료를 대기하고 있던 프로세스를 재개할 수 있도록 합니다. */
+  sema_up (&t->load_semaphore);
 
   /* If load failed, quit. */
-  if (!success) 
+  if (!t->load_succeeded) 
     {
       palloc_free_page (cmdline);
       thread_exit ();
+      NOT_REACHED ();
     }
 
+  /* 스택에 인자를 넣습니다. */
   argument_stack (cmdline, &if_.esp);
 
   palloc_free_page (cmdline);
@@ -141,6 +147,8 @@ start_process (void *aux)
   NOT_REACHED ();
 }
 
+struct thread
+
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a
@@ -151,15 +159,18 @@ start_process (void *aux)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  // 테스트 결과를 볼 수 있도록 하는 임시 방편
-  int volatile i, j;
-  for (i = 0; i < 2000000; i++)
-    j++;
+  struct thread *child = NULL;
+  if (!child)
+    return -1;
 
-  // 지금은 항상 정상적으로 종료된 것처럼 합니다.
-  return 0;
+  /* 자식 프로세스가 종료 직전 상태가 되기를 기다립니다. */ 
+  sema_down (child->wait_semaphore);
+  /* 자식 프로세스를 완전히 제거할 수 있게 합니다. */
+  sema_up (child->exit_semaphore);
+  
+  return child->exit_status;  
 }
 
 /* Free the current process's resources. */

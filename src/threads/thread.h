@@ -98,6 +98,26 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
+    /* 부모 프로세스 */
+    struct thread *parent;
+
+    /* 부모 프로세스의 자식 리스트에 들어가는 원소 */
+    struct list_elem child_list_elem;
+    /* 이 프로세스의 자식 리스트 */
+    struct list child_list;
+
+    /* 종료 코드 */
+    int exit_status;
+    /* 적재 성공 여부 */
+    bool load_succeeded;
+
+    /* 적재 세마포어 */
+    struct semaphore load_sema;
+    /* 종료 세마포어. 실습 자료의 종료 세마포어와 다릅니다. */
+    struct semaphore exit_sema;
+    /* 대기 세마포어 */
+    struct semaphore wait_sema;
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
