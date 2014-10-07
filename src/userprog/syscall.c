@@ -160,7 +160,7 @@ syscall_handler (struct intr_frame *f)
         get_arguments (f->esp, args, 2);
         get_user_strings ((char **) args, 0b1000);
         f->eax = create ((const char *) args[0], args[1]);
-  	    free_user_strings ((char **) args, 0b1000);
+        free_user_strings ((char **) args, 0b1000);
         break;
       case SYS_REMOVE:
         get_arguments (f->esp, args, 1);
@@ -246,6 +246,7 @@ exec (const char *file)
   tid_t tid;
   struct thread *child;
 
+  // 여기에서 실패하면 스레드 자료 구조 생성 실패입니다.
   if ((tid = process_execute (file)) == TID_ERROR)
     return TID_ERROR;
 
@@ -253,6 +254,7 @@ exec (const char *file)
   ASSERT (child);
 
   sema_down (&child->load_sema);
+  // 여기에서 실패하면 프로그램 적재 실패입니다.
   if (!child->load_succeeded)
     return TID_ERROR;
 

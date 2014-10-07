@@ -226,9 +226,11 @@ thread_get_child (tid_t tid)
        e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, child_elem);
+      // 같은 것을 찾았으면 바로 반환합니다.
       if (t->tid == tid)
         return t;
     }
+  // 찾지 못했습니다.
   return NULL;
 }
 
@@ -322,6 +324,7 @@ thread_exit (void)
        child = list_next (child))
     {
       struct thread *t = list_entry (child, struct thread, child_elem);
+      // 더 이상 리스트를 사용하지 않을 것이므로 리스트에서 제거하지는 않습니다.
       sema_up (&t->destroy_sema);
     }
 
@@ -514,6 +517,7 @@ init_thread (struct thread *t, const char *name, int priority)
   sema_init (&t->destroy_sema, 0);
   sema_init (&t->load_sema, 0);
 
+  // 자식 스레드 리스트 초기화
   list_init (&t->child_list);
 }
 

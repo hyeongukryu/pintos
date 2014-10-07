@@ -121,6 +121,7 @@ start_process (void *aux)
   if_.eflags = FLAG_IF | FLAG_MBS;
   t->load_succeeded = load (cmdline->cmd, &if_.eip, &if_.esp);
 
+  // 부모 프로세스에서 exec 함수 수행을 재개해도 좋습니다.
   sema_up (&t->load_sema);
 
   /* If load failed, quit. */
@@ -158,12 +159,21 @@ process_wait (tid_t child_tid)
 {
   struct thread *child;
   int exit_status;
+
+  // tid가 잘못되었거나 wait를 두 번 이상 반복하는 경우
+  // 리스트에서 찾을 수 없고 결과적으로 -1을 반환합니다.
   if (!(child = thread_get_child(child_tid)))
     return -1;
+
+  // 자식 프로세스가 종료되기를 기다립니다.
   sema_down (&child->wait_sema);
+  // 자식 프로세스를 이 프로세스의 자식 리스트에서 제거합니다.
   list_remove (&child->child_elem);
+  // 자식 프로세스의 종료 상태를 얻습니다.
   exit_status = child->exit_status;
+  // 자식 프로세스를 완전히 제거해도 좋습니다.
   sema_up (&child->destroy_sema);
+  
   return exit_status;
 }
 
