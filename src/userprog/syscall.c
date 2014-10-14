@@ -10,6 +10,9 @@
 #include "threads/malloc.h"
 #include "process.h"
 #include "threads/synch.h"
+#include "userprog/pagedir.h"
+#include "filesys/file.h"
+#include "devices/input.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -205,9 +208,9 @@ syscall_handler (struct intr_frame *f)
       case SYS_WRITE:
         get_arguments (f->esp, args, 3);
         check_user_string_l ((const char *) args[1], (unsigned) args[2]);
-        args[1] = get_user_string_l ((const char *) args[1], (unsigned) args[2]);
+        args[1] = (int) get_user_string_l ((const char *) args[1], (unsigned) args[2]);
         f->eax = write ((int) args[0], (const void *) args[1], (unsigned) args[2]);
-        free (args[1]);
+        free ((void *) args[1]);
         args[1] = 0;
         break;
       case SYS_EXEC:
@@ -223,7 +226,7 @@ syscall_handler (struct intr_frame *f)
       case SYS_OPEN:
         get_arguments (f->esp, args, 1);
         get_user_strings ((char **) args, 0b1000);
-        f->eax = open ((const char **) args[0]);
+        f->eax = open ((const char *) args[0]);
         free_user_strings ((char **) args, 0b1000);
         break;
       case SYS_FILESIZE:
