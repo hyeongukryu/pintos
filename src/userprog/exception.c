@@ -151,6 +151,7 @@ page_fault (struct intr_frame *f)
 
   if (user)
     {
+      // 사용자 프로세스에 의한 페이지 폴트입니다.
       exit (-1);
       NOT_REACHED ();
     }
@@ -165,4 +166,3 @@ page_fault (struct intr_frame *f)
           user ? "user" : "kernel");
   kill (f);
 }
-

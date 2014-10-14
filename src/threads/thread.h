@@ -124,10 +124,12 @@ struct thread
     // 감소: 부모 프로세스의 exec에서 적재 완료 대기
     struct semaphore load_sema;
 
+    // 이 프로세스의 프로그램 파일을 연 다음 쓸 수 없도록 한 것
     struct file *run_file;
 
     // 다음 차례에 할당될 파일 디스크립터 번호
     int next_fd;
+
     // 파일 디스크립터 테이블
     struct file **fd_table;
 

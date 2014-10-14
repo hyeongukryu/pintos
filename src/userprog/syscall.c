@@ -13,8 +13,8 @@
 
 static void syscall_handler (struct intr_frame *);
 
-// 커널에서 시스템 콜을 실제로 처리합니다.
-// 이 함수들은 포인터가 가리키는 값에 안전하게 접근할 수 있다고 가정합니다.
+// 시스템 콜의 커널 쪽 서비스 루틴입니다.
+// 이 함수들은 포인터가 가리키는 영역에 안전하게 접근할 수 있다고 가정합니다.
 static void halt (void);
 void exit (int);
 static tid_t exec (const char *);
@@ -29,13 +29,16 @@ static void seek (int, unsigned);
 static unsigned tell (int);
 static void close (int);
 
-// 파일 작업 락
+// 파일 작업 락입니다.
+// 파일 읽기 또는 쓰기 작업을 수행할 때 사용해야 합니다.
 struct lock file_lock;
 
 void
 syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+
+  // 파일 작업 락 초기화
   lock_init (&file_lock);
 }
 
@@ -44,11 +47,13 @@ syscall_init (void)
 static inline void
 check_address (void *addr)
 {
+  // 유저 영역 주소인지 확인한 다음, 할당된 페이지에 대한 주소인지 확인합니다.
   if ((is_user_vaddr (addr) && addr >= (void *)0x08048000UL &&
        pagedir_get_page (thread_current ()->pagedir, addr)) == false)
     exit (-1);
 }
 
+// 4 바이트 값에 대한 안전한 포인터인지 검사합니다.
 static inline void
 check_address4 (void *addr)
 {
@@ -68,6 +73,7 @@ get_arguments (int32_t *esp, int32_t *args, int count)
   }
 }
 
+// 아래 함수와 같으며, 주어진 크기를 가정합니다.
 static inline void
 check_user_string_l (const char *str, unsigned size)
 {
@@ -75,14 +81,14 @@ check_user_string_l (const char *str, unsigned size)
     check_address ((void *) (str++));  
 }
 
-// 사용자 문자열의 유효성을 확인합니다.
+// 널 문자로 종료되는 사용자 문자열의 유효성을 확인합니다.
 static inline void
 check_user_string (const char *str)
 {
   for (; check_address ((void *) str), *str; str++);
 }
 
-// 아래 함수와 같으며, 크기를 미리 지정합니다.
+// 아래 함수와 같으며, 주어진 크기를 가정합니다.
 static inline char *
 get_user_string_l (const char *str, unsigned size)
 {
@@ -116,7 +122,7 @@ free_single_user_string (char **args, int flag, int index)
     }
 }
 
-// 플래그의 마지막 4비트 설정에 따라서 문자열들을 해제합니다.
+// 플래그의 마지막 4비트에 따라서 문자열들을 해제합니다.
 static inline void
 free_user_strings (char **args, int flag)
 {
@@ -127,7 +133,7 @@ free_user_strings (char **args, int flag)
   free_single_user_string (args, flag, 3);
 }
 
-// 플래그에 맞을 때 사용자 문자열을 복사합니다.
+// 플래그가 맞을 때 사용자 문자열을 복사합니다.
 // 작업 중 실패하면 내용을 되돌리고 종료합니다.
 // 유효성을 검증한 다음 이 작업을 실행해야 합니다.
 static inline void
@@ -155,7 +161,7 @@ check_single_user_string (char **args, int flag, int index)
 
 // 플래그의 마지막 4비트에 따라서 사용자 문자열을 확인하고 가져옵니다.
 // 새로운 메모리를 동적 할당합니다. 
-static inline void 
+static inline void
 get_user_strings (char **args, int flag)
 {
   ASSERT (0 <= flag && flag <= 0b1111);
@@ -284,6 +290,7 @@ exec (const char *file)
   ASSERT (child);
 
   sema_down (&child->load_sema);
+
   // 여기에서 실패하면 프로그램 적재 실패입니다.
   if (!child->load_succeeded)
     return TID_ERROR;
@@ -312,6 +319,7 @@ remove (const char *file)
 static int
 open (const char *file)
 {
+  // process_add_file는 NULL에서 -1 반환하므로 안전합니다.
   return process_add_file (filesys_open (file));
 }
 
@@ -319,7 +327,7 @@ static int
 filesize (int fd)
 {
   struct file *f = process_get_file (fd);
-  if (!f)
+  if (f == NULL)
     return -1;
 	return file_length (f);
 }
@@ -331,14 +339,14 @@ read (int fd, void *buffer, unsigned size)
   lock_acquire (&file_lock);
   if (fd == STDIN_FILENO)
   {
+    // 표준 입력
     unsigned count = size;
     while (count--)
       *((char *)buffer++) = input_getc();
     lock_release (&file_lock);  
     return size;
   }
-  f = process_get_file (fd);
-  if (!f)
+  if ((f = process_get_file (fd)) == NULL)
     {
       lock_release (&file_lock);
       return -1;
@@ -359,8 +367,7 @@ write (int fd, const void *buffer, unsigned size)
       lock_release (&file_lock);
       return size;  
     }
-  f = process_get_file (fd);
-  if (!f)
+  if ((f = process_get_file (fd)) == NULL)
     {
       lock_release (&file_lock);
       return 0;
@@ -374,7 +381,7 @@ static void
 seek (int fd, unsigned position)
 {
   struct file *f = process_get_file (fd);
-  if (!f)
+  if (f == NULL)
     return;
   file_seek (f, position);  
 }
@@ -383,7 +390,7 @@ static unsigned
 tell (int fd)
 {
   struct file *f = process_get_file (fd);
-  if (!f)
+  if (f == NULL)
     exit (-1);
   return file_tell (f);
 }
@@ -393,4 +400,3 @@ close (int fd)
 { 
   process_close_file (fd);
 }
-

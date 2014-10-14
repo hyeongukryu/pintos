@@ -184,16 +184,18 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
-  // 파일 디스크립터 테이블 할당 및 초기화
+  // 파일 디스크립터 테이블을 할당하고 초기화합니다.
+  // 이 테이블을 초과하면 어떻게 될지는 생각하지 않기로 합니다.
   t->fd_table = palloc_get_page (PAL_ZERO);
   if (t->fd_table == NULL)
     {
+      // 되돌리기
       palloc_free_page (t);
       return TID_ERROR;
     }
-  // 표준 입력, 표준 출력
+  // 표준 입력과 표준 출력이 먼저 fd를 점유합니다.
   t->next_fd = 2;
-  // 메모리 절약
+  // 메모리 절약하기
   t->fd_table -= t->next_fd;
 
   // 현재 프로세스의 자식 프로세스 목록에 새 프로세스를 추가합니다.
@@ -642,7 +644,7 @@ allocate_tid (void)
 
   return tid;
 }
-
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);

@@ -125,7 +125,7 @@ start_process (void *aux)
   sema_up (&t->load_sema);
 
   /* If load failed, quit. */
-  if (!t->load_succeeded) 
+  if (!t->load_succeeded)
     {
       palloc_free_page (cmdline);
       thread_exit ();
@@ -186,12 +186,15 @@ process_exit (void)
 
   // 이 프로세스가 사용한 파일을 정리합니다.
   for (cur->next_fd--; cur->next_fd >= 2; cur->next_fd--)
+    // 이미 닫힌 경우에도 안전합니다.
     file_close (cur->fd_table[cur->next_fd]);
 
   // 파일 디스크립터 테이블을 해제합니다.
   cur->fd_table += 2;
   palloc_free_page (cur->fd_table);
 
+  // 이 프로세스의 프로그램 파일에 대한 쓰기를 허용합니다.
+  // 파일을 닫는 과정에서 쓰기 금지 해제가 이루어집니다.
   file_close (cur->run_file);
 
   /* Destroy the current process's page directory and switch back
@@ -228,35 +231,46 @@ process_activate (void)
   tss_update ();
 }
 
+// 실행 중인 프로세스의 파일 디스크립터 테이블에
+// 새 파일을 추가하고 새로 할당된 파일 디스크립터 번호를 반환합니다.
+// 파일 커널 자료 구조에 대한 포인터가 NULL이면 -1을 반환합니다.
 int
 process_add_file (struct file *f)
 {
   struct thread *t;
   int fd;
-  if (!f)
+  if (f == NULL)
     return -1;
   t = thread_current ();
+  // 동시성 문제에 대해 안전합니다.
   fd = t->next_fd++;
   t->fd_table[fd] = f;
-  return fd;  
+  return fd;
 }
 
+// 실행 중인 프로세스의
+// 파일 디스크럽터 번호 fd에 해당하는 파일 커널 자료 구조를 반환합니다.
+// 표준 입출력, 아직 할당되지 않았거나 이미 닫힌 경우 NULL을 반환합니다.
 struct file *
 process_get_file (int fd)
 {
   struct thread *t = thread_current ();
   if (fd <= 1 || t->next_fd <= fd)
-    return 0;
+    return NULL;
   return t->fd_table[fd];
 }
 
+// 실행 중인 프로세스의
+// 파일 디스크립터 번호 fd에 해당하는 파일을 닫습니다.
+// 표준 입출력, 아직 할당되지 않았거나 이미 닫힌 경우 무시합니다.
 void process_close_file (int fd)
 {
   struct thread *t = thread_current ();
   if (fd <= 1 || t->next_fd <= fd)
     return;
+  // file_close는 NULL을 무시합니다.
   file_close (t->fd_table[fd]);
-  t->fd_table[fd] = 0;
+  t->fd_table[fd] = NULL;
 }
 
 /* We load ELF binaries.  The following definitions are taken
@@ -451,7 +465,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file_close (file);
   return success;
 }
-
+
 /* load() helpers. */
 
 static bool install_page (void *upage, void *kpage, bool writable);
