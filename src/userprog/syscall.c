@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -8,24 +9,34 @@
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
 #include "process.h"
-#include <string.h>
+#include "threads/synch.h"
 
 static void syscall_handler (struct intr_frame *);
 
 // 커널에서 시스템 콜을 실제로 처리합니다.
 // 이 함수들은 포인터가 가리키는 값에 안전하게 접근할 수 있다고 가정합니다.
 static void halt (void);
-static void exit (int);
-static bool create (const char *, unsigned);
-static bool remove (const char *);
-static int write (int, const void *, unsigned);
+void exit (int);
 static tid_t exec (const char *);
 static int wait (tid_t);
+static bool create (const char *, unsigned);
+static bool remove (const char *);
+static int open (const char *);
+static int filesize (int);
+static int read (int, void *, unsigned);
+static int write (int, const void *, unsigned);
+static void seek (int, unsigned);
+static unsigned tell (int);
+static void close (int);
+
+// 파일 작업 락
+struct lock file_lock;
 
 void
 syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init (&file_lock);
 }
 
 // 주소 addr이 유효한 유저 모드 주소가 아니면 프로세스를 종료합니다.
@@ -57,24 +68,41 @@ get_arguments (int32_t *esp, int32_t *args, int count)
   }
 }
 
+static inline void
+check_user_string_l (const char *str, unsigned size)
+{
+  while (size--)
+    check_address ((void *) (str++));  
+}
+
 // 사용자 문자열의 유효성을 확인합니다.
 static inline void
 check_user_string (const char *str)
 {
-  for (; check_address ((void *)str), *str; str++);
+  for (; check_address ((void *) str), *str; str++);
+}
+
+// 아래 함수와 같으며, 크기를 미리 지정합니다.
+static inline char *
+get_user_string_l (const char *str, unsigned size)
+{
+  char *buffer = 0;
+  buffer = malloc (size);
+  if (!buffer)
+    return 0;
+  memcpy (buffer, str, size);
+  return buffer;
 }
 
 // 사용자 문자열을 가져옵니다. 새로운 메모리를 동적 할당합니다.
 static inline char *
 get_user_string (const char *str)
 {
-  int size = strlen (str) + 1;
-  char *buffer = 0;
-  buffer = malloc (size);
-  if (!buffer)
-    return 0;
-  strlcpy (buffer, str, size);
-  return buffer;
+  unsigned size;
+  char *buffer;
+  size = strlen (str) + 1;
+  buffer = get_user_string_l (str, size);
+  return buffer; 
 }
 
 // 플래그가 맞을 때 동적 할당된 문자열을 해제하고 널 포인터를 대입합니다.
@@ -170,9 +198,11 @@ syscall_handler (struct intr_frame *f)
         break;
       case SYS_WRITE:
         get_arguments (f->esp, args, 3);
-        get_user_strings ((char **) args, 0b0100);
+        check_user_string_l ((const char *) args[1], (unsigned) args[2]);
+        args[1] = get_user_string_l ((const char *) args[1], (unsigned) args[2]);
         f->eax = write ((int) args[0], (const void *) args[1], (unsigned) args[2]);
-        free_user_strings ((char **) args, 0b0100);
+        free (args[1]);
+        args[1] = 0;
         break;
       case SYS_EXEC:
         get_arguments (f->esp, args, 1);
@@ -185,11 +215,32 @@ syscall_handler (struct intr_frame *f)
         f->eax = wait ((tid_t) args[0]);
         break;
       case SYS_OPEN:
+        get_arguments (f->esp, args, 1);
+        get_user_strings ((char **) args, 0b1000);
+        f->eax = open ((const char **) args[0]);
+        free_user_strings ((char **) args, 0b1000);
+        break;
       case SYS_FILESIZE:
+        get_arguments (f->esp, args, 1);
+        f->eax = filesize ((int) args[0]);
+        break;
       case SYS_READ:
+        get_arguments (f->esp, args, 3);
+        check_user_string_l ((const char *) args[1], (unsigned) args[2]);
+        f->eax = read ((int) args[0], (void *) args[1], (unsigned) args[2]);
+        break;
       case SYS_SEEK:
+        get_arguments (f->esp, args, 2);
+        seek ((int) args[0], (unsigned) args[1]);
+        break;
       case SYS_TELL:
+        get_arguments (f->esp, args, 1);
+        f->eax = tell ((int) args[0]);
+        break;
       case SYS_CLOSE:
+        get_arguments (f->esp, args, 1);
+        close ((int) args[0]);
+        break;
       case SYS_MMAP:
       case SYS_MUNMAP:
       case SYS_CHDIR:
@@ -211,33 +262,12 @@ halt (void)
   shutdown_power_off ();
 }
 
-static void
+void
 exit (int status)
 {
   thread_current ()->exit_status = status;
   printf ("%s: exit(%d)\n", thread_name (), status);
   thread_exit ();
-}
-
-static bool
-create (const char *file, unsigned initial_size)
-{
-  return filesys_create (file, initial_size); 
-}
-
-static bool
-remove (const char *file)
-{
-  return filesys_remove (file);
-}
-
-static int
-write (int fd, const void *buffer, unsigned size)
-{
-  if (fd != 1)
-    return 0;
-  putbuf (buffer, size);
-  return size;
 }
 
 static tid_t
@@ -266,3 +296,101 @@ wait (tid_t tid)
 {
   return process_wait (tid);
 }
+
+static bool
+create (const char *file, unsigned initial_size)
+{
+  return filesys_create (file, initial_size); 
+}
+
+static bool
+remove (const char *file)
+{
+  return filesys_remove (file);
+}
+
+static int
+open (const char *file)
+{
+  return process_add_file (filesys_open (file));
+}
+
+static int
+filesize (int fd)
+{
+  struct file *f = process_get_file (fd);
+  if (!f)
+    return -1;
+	return file_length (f);
+}
+
+static int
+read (int fd, void *buffer, unsigned size)
+{
+  struct file *f;
+  lock_acquire (&file_lock);
+  if (fd == STDIN_FILENO)
+  {
+    unsigned count = size;
+    while (count--)
+      *((char *)buffer++) = input_getc();
+    lock_release (&file_lock);  
+    return size;
+  }
+  f = process_get_file (fd);
+  if (!f)
+    {
+      lock_release (&file_lock);
+      return -1;
+    }
+  size = file_read (f, buffer, size);
+  lock_release (&file_lock);
+  return size;
+}
+
+static int
+write (int fd, const void *buffer, unsigned size)
+{
+  struct file *f;
+  lock_acquire (&file_lock);
+  if (fd == STDOUT_FILENO)
+    {
+      putbuf (buffer, size);
+      lock_release (&file_lock);
+      return size;  
+    }
+  f = process_get_file (fd);
+  if (!f)
+    {
+      lock_release (&file_lock);
+      return 0;
+    }
+  size = file_write (f, buffer, size);
+  lock_release (&file_lock);
+  return size;
+}
+
+static void
+seek (int fd, unsigned position)
+{
+  struct file *f = process_get_file (fd);
+  if (!f)
+    return;
+  file_seek (f, position);  
+}
+
+static unsigned
+tell (int fd)
+{
+  struct file *f = process_get_file (fd);
+  if (!f)
+    exit (-1);
+  return file_tell (f);
+}
+
+static void
+close (int fd)
+{ 
+  process_close_file (fd);
+}
+

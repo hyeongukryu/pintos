@@ -184,6 +184,16 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  // 이 프로세스가 사용한 파일을 정리합니다.
+  for (cur->next_fd--; cur->next_fd >= 2; cur->next_fd--)
+    file_close (cur->fd_table[cur->next_fd]);
+
+  // 파일 디스크립터 테이블을 해제합니다.
+  cur->fd_table += 2;
+  palloc_free_page (cur->fd_table);
+
+  file_close (cur->run_file);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -217,7 +227,38 @@ process_activate (void)
      interrupts. */
   tss_update ();
 }
-
+
+int
+process_add_file (struct file *f)
+{
+  struct thread *t;
+  int fd;
+  if (!f)
+    return -1;
+  t = thread_current ();
+  fd = t->next_fd++;
+  t->fd_table[fd] = f;
+  return fd;  
+}
+
+struct file *
+process_get_file (int fd)
+{
+  struct thread *t = thread_current ();
+  if (fd <= 1 || t->next_fd <= fd)
+    return 0;
+  return t->fd_table[fd];
+}
+
+void process_close_file (int fd)
+{
+  struct thread *t = thread_current ();
+  if (fd <= 1 || t->next_fd <= fd)
+    return;
+  file_close (t->fd_table[fd]);
+  t->fd_table[fd] = 0;
+}
+
 /* We load ELF binaries.  The following definitions are taken
    from the ELF specification, [ELF1], more-or-less verbatim.  */
 
@@ -287,6 +328,8 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
 
+extern struct lock file_lock;
+
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
@@ -307,13 +350,20 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  lock_acquire (&file_lock);
+
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
     {
+      lock_release (&file_lock);
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+
+  t->run_file = file_reopen(file);
+  file_deny_write (t->run_file);
+  lock_release (&file_lock);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr

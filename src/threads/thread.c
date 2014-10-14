@@ -184,6 +184,18 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
+  // 파일 디스크립터 테이블 할당 및 초기화
+  t->fd_table = palloc_get_page (PAL_ZERO);
+  if (t->fd_table == NULL)
+    {
+      palloc_free_page (t);
+      return TID_ERROR;
+    }
+  // 표준 입력, 표준 출력
+  t->next_fd = 2;
+  // 메모리 절약
+  t->fd_table -= t->next_fd;
+
   // 현재 프로세스의 자식 프로세스 목록에 새 프로세스를 추가합니다.
   list_push_back (&thread_current ()->child_list, &t->child_elem);
 
