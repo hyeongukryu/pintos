@@ -375,8 +375,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
 
-  t->run_file = file_reopen(file);
-  file_deny_write (t->run_file);
+  t->run_file = file;
+  file_deny_write (file);
   lock_release (&file_lock);
 
   /* Read and verify executable header. */
@@ -462,7 +462,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 
