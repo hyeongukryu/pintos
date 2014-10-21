@@ -133,6 +133,8 @@ struct thread
     // 파일 디스크립터 테이블
     struct file **fd_table;
 
+    int64_t next_tick_to_awake;
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -160,8 +162,12 @@ struct thread *thread_current (void);
 tid_t thread_tid (void);
 const char *thread_name (void);
 
+void thread_sleep (int64_t);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+
+void thread_awake (int64_t);
+int64_t get_next_tick_to_awake (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
