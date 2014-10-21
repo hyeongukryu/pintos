@@ -92,6 +92,8 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
+
+  // 지금부터 ticks 탁 이후에 다시 깨우도록 하고 이 스레드를 블락합니다.
   thread_sleep (start + ticks);
 }
 
@@ -164,7 +166,7 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
@@ -172,7 +174,9 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   thread_tick ();
 
+  // 미리 계산해 둔 스레드 깨우기 시간이 되었을 경우라면
   if (get_next_tick_to_awake() <= ticks)
+    // 깨워야 할 스레드를 깨우고 다음 깨우기 시간을 새로 계산합니다.
     thread_awake (ticks);
 }
 

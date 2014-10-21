@@ -28,8 +28,11 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+// 타이머 대기를 이유로 블록된 스레드들의 리스트입니다.
 static struct list sleep_list;
 
+// 리스트의 sleep_list의 스레드에서 가장 이른 next_tick_to_awake입니다.
+// 만약 타이머 대기 중인 스레드가 없다면 INT64_MAX로 지정됩니다.
 static int64_t next_tick_to_awake = INT64_MAX;
 
 /* Idle thread. */
@@ -364,50 +367,77 @@ thread_exit (void)
   NOT_REACHED ();
 }
 
+// 커널은 타이머 대기 중인 스레드의 깨우기 목표 틱 중에서
+// 가장 빨리 도래하는 스레드의 깨우기 목표 틱을 계속 유지합니다.
+// 그 값을 갱신합니다.
 static void
 update_next_tick_to_awake (int64_t tick)
 {
+  // 지금 들어온 값이 더 빠르면, 갱신합니다.
   next_tick_to_awake = (next_tick_to_awake > tick) ? tick : next_tick_to_awake;
 }
 
+// update_next_tick_to_awake에서 설명한 틱 값을 반환합니다.
 int64_t
 get_next_tick_to_awake (void)
 {
   return next_tick_to_awake;
 }
 
+// 지금부터 ticks 탁 이후에 다시 깨우도록 하고 이 스레드를 블락합니다.
 void 
 thread_sleep (int64_t tick)
 {
   struct thread *cur;
   enum intr_level old_level;
+
+  // 인터럽트를 금지하고, 이전 인터럽트 레벨을 저장합니다.
   old_level = intr_disable ();
   cur = thread_current ();
-  ASSERT (cur != idle_thread); 
-  update_next_tick_to_awake (cur->next_tick_to_awake = tick); 
+
+  // idle 스레드는 sleep되지 않아야 하며,
+  // 해당 스레드 코드는 이 함수를 호출하지 않습니다.
+  ASSERT (cur != idle_thread);
+
+  // 아무 스레드를 깨워야 하는 가장 이른 틱을 갱신합니다.
+  update_next_tick_to_awake (cur->wakeup_tick = tick); 
+
+  // 타이머 대기 리스트에 이 스레드를 추가합니다.
   list_push_back (&sleep_list, &cur->elem);
+
+  // 이 스레드를 블락하고 다시 스케줄될 때까지 블락된 상태로 대기합니다.
   thread_block ();
+
+  // 인터럽트 레벨을 처음 상태로 되돌립니다.
   intr_set_level (old_level);
 }
 
+// sleep_list에서 깨워야 하는 모든 스레드를 블락 상태에서
+// 대기 상태로 바꾸며, 다음 깨우기 시간을 새로 계산합니다.
 void
 thread_awake (int64_t current_tick)
 {
-  next_tick_to_awake = INT64_MAX;
   struct list_elem *e;
+
+  // 기본값 초기화
+  next_tick_to_awake = INT64_MAX;
+  // sleep_list를 순회합니다.
   e = list_begin (&sleep_list);
   while (e != list_end (&sleep_list))
     {
       struct thread *t = list_entry (e, struct thread, elem);
-      if (current_tick >= t->next_tick_to_awake)
+      if (current_tick >= t->wakeup_tick)
         {
+          // 리스트에서 제거합니다.
           e = list_remove (&t->elem);
+          // 스레드 t의 상태를 블록된 상태에서 대기 상태로 변경합니다.
           thread_unblock (t);
         }
       else
         {
           e = list_next (e);
-          update_next_tick_to_awake (t->next_tick_to_awake);
+          // 다음 깨우기 틱 갱신
+          update_next_tick_to_awake (t->wakeup_tick);
         }
     }
 }
