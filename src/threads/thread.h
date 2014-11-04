@@ -89,6 +89,10 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int base_priority;
+    struct lock *wait_on_lock;
+    struct list donations;
+    struct list_elem donation_elem;
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -178,6 +182,10 @@ int thread_get_priority (void);
 void thread_set_priority (int);
 bool thread_compare_priority (const struct thread *, const struct thread *);
 void thread_preempt (void);
+
+void donate_priority (struct thread *);
+void refresh_priority (struct thread *, int *);
+void remove_with_lock (struct thread *, struct lock *);
 
 int thread_get_nice (void);
 void thread_set_nice (int);

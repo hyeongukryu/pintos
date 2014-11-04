@@ -485,7 +485,12 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  intr_disable();
+  thread_current ()->base_priority = new_priority;
+  thread_current ()->priority = thread_current ()->base_priority;
+  refresh_priority (thread_current (), &thread_current ()->priority);
+  donate_priority (thread_current ());
+  intr_enable();
   thread_preempt ();
 }
 
@@ -517,6 +522,47 @@ thread_preempt (void)
       thread_current ()->priority
       < list_entry (list_front (&ready_list), struct thread, elem)->priority)
     thread_yield();
+}
+
+void
+donate_priority (struct thread *cur)
+{
+  struct thread *holder;
+  for (; cur->wait_on_lock && (holder = cur->wait_on_lock->holder); cur = holder)
+    refresh_priority (holder, &holder->priority);
+}
+
+void
+refresh_priority (struct thread *cur, int *priority)
+{
+  struct list_elem *e;
+
+  if (*priority <= cur->priority)
+    *priority = cur->priority;
+  else
+    return;
+ 
+  for (e = list_begin (&cur->donations); e != list_end (&cur->donations);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, donation_elem);
+      refresh_priority (t, priority);
+    }
+}
+
+void
+remove_with_lock (struct thread *cur, struct lock *lock)
+{
+  struct list_elem *e;
+
+  for (e = list_begin (&cur->donations); e != list_end (&cur->donations); )
+    {
+      struct thread *t = list_entry (e, struct thread, donation_elem);
+      remove_with_lock (t, lock);
+      if (t->wait_on_lock == lock)
+        e = list_remove (e); 
+      else e = list_next (e);
+    }
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -633,7 +679,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
-  t->priority = priority;
+  t->base_priority = t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 
@@ -644,6 +690,8 @@ init_thread (struct thread *t, const char *name, int priority)
 
   // 자식 스레드 리스트 초기화
   list_init (&t->child_list);
+
+  list_init (&t->donations);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
