@@ -176,6 +176,8 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+bool thread_compare_priority (const struct thread *, const struct thread *);
+void thread_preempt (void);
 
 int thread_get_nice (void);
 void thread_set_nice (int);

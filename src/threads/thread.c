@@ -77,9 +77,8 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static void test_max_priority (void);
-static bool thread_compare_priority (const struct list_elem *,
-                                     const struct list_elem *, void *);
+static bool ready_list_compare (const struct list_elem *,
+                                const struct list_elem *, void *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -237,7 +236,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  test_max_priority ();
+  thread_preempt ();
 
   return tid;
 }
@@ -294,7 +293,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, thread_compare_priority, 0);
+  list_insert_ordered (&ready_list, &t->elem, ready_list_compare, 0);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -459,7 +458,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_insert_ordered (&ready_list, &cur->elem, thread_compare_priority, 0);
+    list_insert_ordered (&ready_list, &cur->elem, ready_list_compare, 0);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -487,7 +486,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
-  test_max_priority ();
+  thread_preempt ();
 }
 
 /* Returns the current thread's priority. */
@@ -497,24 +496,27 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
-static bool
-thread_compare_priority (const struct list_elem *a,
-                         const struct list_elem *b,
-                         void *aux UNUSED)
+bool
+thread_compare_priority (const struct thread *a, const struct thread *b)
 {
-  return list_entry (a, struct thread, elem)->priority
-       > list_entry (b, struct thread, elem)->priority;  
+  return a->priority > b->priority;
 }
 
-static void
-test_max_priority (void)
+static bool
+ready_list_compare (const struct list_elem *a, const struct list_elem *b,
+                    void *aux UNUSED)
+{
+  return thread_compare_priority (list_entry (a, struct thread, elem),
+                                  list_entry (b, struct thread, elem));
+}
+
+void
+thread_preempt (void)
 {
   if (!list_empty (&ready_list) &&
-      thread_current ()->priority <
-      list_entry (list_front (&ready_list), struct thread, elem)->priority)
-    {
-      thread_yield ();
-    }
+      thread_current ()->priority
+      < list_entry (list_front (&ready_list), struct thread, elem)->priority)
+    thread_yield();
 }
 
 /* Sets the current thread's nice value to NICE. */
