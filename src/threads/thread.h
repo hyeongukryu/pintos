@@ -140,6 +140,9 @@ struct thread
     // 이 스레드가 sleep_list의 원소일 때, 이 틱 이전에 스레드를 깨우지 않도록 합니다.
     int64_t wakeup_tick;
 
+    int nice;
+    int recent_cpu;
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
