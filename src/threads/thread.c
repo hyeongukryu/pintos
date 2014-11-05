@@ -236,7 +236,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  // 새 스레드가 우선순위가 더 높다면 선점할 수 있게 합니다.jjjjjjjk
+  // 새 스레드가 우선순위가 더 높다면 선점할 수 있게 합니다.
   thread_preempt ();
 
   return tid;
