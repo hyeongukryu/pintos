@@ -88,11 +88,18 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
+    // 적용 우선순위
+    int priority;
+    // 기본 우선순위
     int base_priority;
+
+    // 대기 원인 락
     struct lock *wait_on_lock;
+
+    // 우선순위 기부 리스트와 원소
     struct list donations;
     struct list_elem donation_elem;
+
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
