@@ -167,12 +167,31 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
+void mlfqs_increment();
+void mlfqs_load_avg();
+void mlfqs_priority(struct thread *);
+void mlfqs_recent_cpu(struct thread *);
+void mlfqs_recalc();
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+ if (thread_mlfqs)
+  {
+    mlfqs_increment();
+   if (ticks % 4 == 0)
+   {
+      mlfqs_priority(thread_current());
+   }
+    if (ticks % 100 == 0)
+   {
+     mlfqs_recalc();
+   }
+  }
 
   // 미리 계산해 둔 스레드 깨우기 시간이 되었을 경우라면
   if (get_next_tick_to_awake() <= ticks)

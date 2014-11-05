@@ -15,10 +15,18 @@
 #include "userprog/process.h"
 #endif
 
+#include "threads/fixed_point.h"
+
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
+
+#define NICE_DEFAULT 0
+#define RECENT_CPU_DEFAULT 0
+#define LOAD_AVG_DEFAULT 0
+
+int load_avg;
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
@@ -80,6 +88,81 @@ static tid_t allocate_tid (void);
 static bool ready_list_compare (const struct list_elem *,
                                 const struct list_elem *, void *);
 
+void mlfqs_priority (struct thread *t)
+{
+  if (t == idle_thread)
+  {
+    return;
+  }
+  int priority = int_to_fp(PRI_MAX);
+  int p2 = div_mixed(t->recent_cpu, 4);
+  int p3 = mult_mixed(int_to_fp(t->nice), 2);
+  priority = sub_fp(priority, p2);
+  priority = sub_fp(priority, p3);
+  t->priority = priority;
+}
+
+void mlfqs_recent_cpu (struct thread *t)
+{
+  if (t == idle_thread) return;
+  int a = mult_mixed(load_avg, 2);
+  int b = add_mixed(mult_mixed(load_avg, 2), 1);
+  int c = t->recent_cpu;
+  int d = int_to_fp(t->nice);
+  int r = add_fp(mult_fp(div_fp(a, b), c), d);
+  t->recent_cpu = r;
+}
+
+int ready_count ()
+{
+int n = 0;
+struct list_elem *e;  
+for (e = list_begin (&ready_list); e != list_end (&ready_list);
+       e = list_next (e))
+    {
+n++;    
+}
+n -= thread_current () == idle_thread;
+return n + 1;
+}
+void mlfqs_load_avg (void)
+{
+ int a = div_fp(int_to_fp(59), int_to_fp(60));
+ int b = load_avg;
+ int c = div_fp(int_to_fp(1), int_to_fp(60));
+int d = int_to_fp(ready_count());
+
+	load_avg = add_fp(mult_fp(a, b), mult_fp(c, d));
+
+  if (load_avg < 0)
+  {
+    load_avg = 0;
+  }
+}
+
+void mlfqs_increment(void)
+{
+  if (thread_current() == idle_thread) return;
+   thread_current()->recent_cpu = add_mixed(thread_current ()->recent_cpu, 1);
+}
+
+void mlfqs_recalc (void)
+{
+struct list_elem *e;  
+mlfqs_load_avg();
+for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, allelem);
+      mlfqs_recent_cpu(t);
+      mlfqs_priority(t);
+    }
+}
+
+
+
+
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -119,6 +202,7 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
+  load_avg = LOAD_AVG_DEFAULT;
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -210,6 +294,8 @@ thread_create (const char *name, int priority,
 
   // 현재 프로세스의 자식 프로세스 목록에 새 프로세스를 추가합니다.
   list_push_back (&thread_current ()->child_list, &t->child_elem);
+
+	t->recent_cpu = thread_current()->recent_cpu;
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack'
@@ -490,6 +576,9 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
+  if (thread_mlfqs) { 
+    return;
+}
   intr_disable();
 
   // 스레드의 기본 우선순위를 지정합니다.
@@ -537,7 +626,13 @@ ready_list_compare (const struct list_elem *a, const struct list_elem *b,
 void
 thread_preempt (void)
 {
+<<<<<<< HEAD
+  if (0 && thread_mlfqs)
+    return;
+
+=======
   // 대기 리스트가 비어 있으면 이 스레드를 제외하고 idle 스레드 하나 뿐입니다.
+>>>>>>> 4f2cdbfecbbf54cd7e9be50e64bfe1deef2f84de
   if (!list_empty (&ready_list) &&
       thread_current ()->priority
       < list_entry (list_front (&ready_list), struct thread, elem)->priority)
@@ -551,6 +646,10 @@ void
 donate_priority (struct thread *cur)
 {
   struct thread *holder;
+
+  if (thread_mlfqs)
+    NOT_REACHED ();
+
   for (; cur->wait_on_lock && (holder = cur->wait_on_lock->holder); cur = holder)
     refresh_priority (holder, &holder->priority);
 }
@@ -564,7 +663,13 @@ refresh_priority (struct thread *cur, int *priority)
 {
   struct list_elem *e;
 
+<<<<<<< HEAD
+  if (thread_mlfqs)
+    NOT_REACHED ();
+
+=======
   // 우선순위 갱신
+>>>>>>> 4f2cdbfecbbf54cd7e9be50e64bfe1deef2f84de
   if (*priority <= cur->priority)
     *priority = cur->priority;
   else
@@ -586,6 +691,9 @@ remove_with_lock (struct thread *cur, struct lock *lock)
 {
   struct list_elem *e;
 
+  if (thread_mlfqs)
+    NOT_REACHED ();
+
   for (e = list_begin (&cur->donations); e != list_end (&cur->donations); )
     {
       struct thread *t = list_entry (e, struct thread, donation_elem);
@@ -598,33 +706,45 @@ remove_with_lock (struct thread *cur, struct lock *lock)
 
 /* Sets the current thread's nice value to NICE. */
 void
+<<<<<<< HEAD
+thread_set_nice (int nice) 
+=======
 thread_set_nice (int nice UNUSED)
+>>>>>>> 4f2cdbfecbbf54cd7e9be50e64bfe1deef2f84de
 {
-  /* Not yet implemented. */
+  intr_disable();
+  thread_current ()->nice = nice;
+  intr_enable();
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void)
 {
-  /* Not yet implemented. */
-  return 0;
+  intr_disable();
+  int nice = thread_current ()->nice;
+  intr_enable();
+  return nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void)
 {
-  /* Not yet implemented. */
-  return 0;
+intr_disable();
+int r = fp_to_int_round(mult_mixed(load_avg, 100));
+intr_enable();
+return r;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void)
 {
-  /* Not yet implemented. */
-  return 0;
+  intr_disable();
+  int r = fp_to_int_round(mult_mixed(thread_current()->recent_cpu, 100));
+  intr_enable();
+  return r;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -724,6 +844,9 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->child_list);
   // 우선순위 기부 리스트 초기화
   list_init (&t->donations);
+
+  t->nice = NICE_DEFAULT;
+  t->recent_cpu = RECENT_CPU_DEFAULT;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -809,6 +932,8 @@ thread_schedule_tail (struct thread *prev)
 static void
 schedule (void)
 {
+  list_sort (&ready_list, ready_list_compare, 0);
+
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;

@@ -218,6 +218,20 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+<<<<<<< HEAD
+  t = thread_current ();
+  if (thread_mlfqs == false)
+  {
+
+  if (lock_try_acquire (lock))
+    return;
+
+  t->wait_on_lock = lock;
+       list_push_back (&lock->holder->donations, &t->donation_elem);
+      donate_priority (t);
+  }  
+sema_down (&lock->semaphore);
+=======
   // 대기해야 하는지 미리 검사합니다.
   if (lock_try_acquire (lock))
     return;
@@ -232,6 +246,7 @@ lock_acquire (struct lock *lock)
   donate_priority (t);
 
   sema_down (&lock->semaphore);
+>>>>>>> 4f2cdbfecbbf54cd7e9be50e64bfe1deef2f84de
   t->wait_on_lock = NULL;
   lock->holder = thread_current ();
 }
@@ -269,14 +284,23 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
 
+<<<<<<< HEAD
+if (thread_mlfqs == false)
+{
+=======
   // 현재 스레드가 잡았던 락으로 인하여 대기하고 있던 모든 스레드를
   // 이 스레드의 우선순위 기부 목록에서 제거합니다.
+>>>>>>> 4f2cdbfecbbf54cd7e9be50e64bfe1deef2f84de
   remove_with_lock (thread_current (), lock);
 
   // 우선순위 기부를 받았다면 기부를 취소할 수 있도록 하는 동작입니다.
   thread_current ()->priority = thread_current ()->base_priority;
   refresh_priority (thread_current (), &thread_current ()->priority);
+<<<<<<< HEAD
+}  
+=======
 
+>>>>>>> 4f2cdbfecbbf54cd7e9be50e64bfe1deef2f84de
   sema_up (&lock->semaphore);
 }
 
