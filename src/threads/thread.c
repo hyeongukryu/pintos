@@ -627,11 +627,13 @@ void
 thread_preempt (void)
 {
   // 대기 리스트가 비어 있으면 이 스레드를 제외하고 idle 스레드 하나 뿐입니다.
+  int k = intr_disable();
   if (!list_empty (&ready_list) &&
       thread_current ()->priority
       < list_entry (list_front (&ready_list), struct thread, elem)->priority)
     // 리스트의 첫 번째 스레드가 이 스레드보다 우선 실행되어야 하므로, 스케줄 반납합니다.
-    thread_yield();
+    intr_set_level(k), thread_yield();
+  intr_set_level(k);
 }
 
 // 간접적인 경우를 포함하여 이 스레드의 대기 원인이 되는 락을 잡은 모든 스레드에 대하여
