@@ -116,11 +116,11 @@ void mlfqs_recent_cpu (struct thread *t)
 int ready_count ()
 {
 int n = 0;
-struct list_elem *e;  
+struct list_elem *e;
 for (e = list_begin (&ready_list); e != list_end (&ready_list);
        e = list_next (e))
     {
-n++;    
+n++;
 }
 n -= thread_current () == idle_thread;
 return n + 1;
@@ -148,7 +148,7 @@ void mlfqs_increment(void)
 
 void mlfqs_recalc (void)
 {
-struct list_elem *e;  
+struct list_elem *e;
 mlfqs_load_avg();
 for (e = list_begin (&all_list); e != list_end (&all_list);
        e = list_next (e))
@@ -576,7 +576,7 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
-  if (thread_mlfqs) { 
+  if (thread_mlfqs) {
     return;
 }
   intr_disable();
@@ -626,13 +626,7 @@ ready_list_compare (const struct list_elem *a, const struct list_elem *b,
 void
 thread_preempt (void)
 {
-<<<<<<< HEAD
-  if (0 && thread_mlfqs)
-    return;
-
-=======
   // 대기 리스트가 비어 있으면 이 스레드를 제외하고 idle 스레드 하나 뿐입니다.
->>>>>>> 4f2cdbfecbbf54cd7e9be50e64bfe1deef2f84de
   if (!list_empty (&ready_list) &&
       thread_current ()->priority
       < list_entry (list_front (&ready_list), struct thread, elem)->priority)
@@ -663,13 +657,10 @@ refresh_priority (struct thread *cur, int *priority)
 {
   struct list_elem *e;
 
-<<<<<<< HEAD
   if (thread_mlfqs)
     NOT_REACHED ();
 
-=======
   // 우선순위 갱신
->>>>>>> 4f2cdbfecbbf54cd7e9be50e64bfe1deef2f84de
   if (*priority <= cur->priority)
     *priority = cur->priority;
   else
@@ -706,11 +697,7 @@ remove_with_lock (struct thread *cur, struct lock *lock)
 
 /* Sets the current thread's nice value to NICE. */
 void
-<<<<<<< HEAD
-thread_set_nice (int nice) 
-=======
-thread_set_nice (int nice UNUSED)
->>>>>>> 4f2cdbfecbbf54cd7e9be50e64bfe1deef2f84de
+thread_set_nice (int nice)
 {
   intr_disable();
   thread_current ()->nice = nice;
