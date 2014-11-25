@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <hash.h>
 #include "synch.h"
 
 /* States in a thread's life cycle. */
@@ -149,6 +150,8 @@ struct thread
 
     int nice;
     int recent_cpu;
+
+    struct hash vm;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
