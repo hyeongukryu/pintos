@@ -364,20 +364,20 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
-//  lock_acquire (&file_lock);
+  lock_acquire (&file_lock);
 
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
     {
-  //    lock_release (&file_lock);
+      lock_release (&file_lock);
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
 
   t->run_file = file;
   file_deny_write (file);
-  //lock_release (&file_lock);
+  lock_release (&file_lock);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr

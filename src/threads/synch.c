@@ -202,22 +202,6 @@ lock_init (struct lock *lock)
   sema_init (&lock->semaphore, 1);
 }
 
-
-
-
-static bool
-is_thread (struct thread *t)
-{
-  return t != NULL && t->magic == 0xcd6abf4b;
-}
-
-
-
-
-
-
-
-
 /* Acquires LOCK, sleeping until it becomes available if
    necessary.  The lock must not already be held by the current
    thread.
@@ -230,19 +214,20 @@ void
 lock_acquire (struct lock *lock)
 {
   struct thread *t;
+  enum intr_level old_level;
+
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-int k ;
   t = thread_current ();
-      k = intr_disable();
+  old_level = intr_disable();
   if (thread_mlfqs == false)
     {
       // 대기해야 하는지 미리 검사합니다.
       if (lock_try_acquire (lock))
       {
-        intr_set_level(k);
+        intr_set_level(old_level);
         return;
       }
 
@@ -260,7 +245,7 @@ int k ;
 
   t->wait_on_lock = NULL;
   lock->holder = thread_current ();
-      intr_set_level(k);
+  intr_set_level(old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -273,8 +258,9 @@ bool
 lock_try_acquire (struct lock *lock)
 {
   bool success;
+  enum intr_level old_level;
 
-  int k = intr_disable();
+  old_level = intr_disable();
 
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
@@ -283,7 +269,7 @@ lock_try_acquire (struct lock *lock)
   if (success)
     lock->holder = thread_current ();
 
-  intr_set_level(k);
+  intr_set_level(old_level);
   return success;
 }
 
@@ -295,10 +281,12 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock)
 {
+  enum intr_level old_level;
+
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  int k = intr_disable();
+  old_level = intr_disable();
 
   lock->holder = NULL;
 
@@ -313,7 +301,7 @@ lock_release (struct lock *lock)
       refresh_priority (thread_current (), &thread_current ()->priority);
     }
   sema_up (&lock->semaphore);
-  intr_set_level(k);
+  intr_set_level(old_level);
 }
 
 /* Returns true if the current thread holds LOCK, false

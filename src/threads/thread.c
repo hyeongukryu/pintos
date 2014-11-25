@@ -91,77 +91,70 @@ static bool ready_list_compare (const struct list_elem *,
 void mlfqs_priority (struct thread *t)
 {
   if (t == idle_thread)
-  {
     return;
-  }
-  int priority = int_to_fp(PRI_MAX);
-  int p2 = div_mixed(t->recent_cpu, 4);
-  int p3 = mult_mixed(int_to_fp(t->nice), 2);
-  priority = sub_fp(priority, p2);
-  priority = sub_fp(priority, p3);
+  int priority = int_to_fp (PRI_MAX);
+  int p2 = div_mixed (t->recent_cpu, 4);
+  int p3 = mult_mixed (int_to_fp (t->nice), 2);
+  priority = sub_fp (priority, p2);
+  priority = sub_fp (priority, p3);
   t->priority = priority;
 }
 
 void mlfqs_recent_cpu (struct thread *t)
 {
-  if (t == idle_thread) return;
-  int a = mult_mixed(load_avg, 2);
-  int b = add_mixed(mult_mixed(load_avg, 2), 1);
+  if (t == idle_thread)
+    return;
+  int a = mult_mixed (load_avg, 2);
+  int b = add_mixed (mult_mixed (load_avg, 2), 1);
   int c = t->recent_cpu;
-  int d = int_to_fp(t->nice);
-  int r = add_fp(mult_fp(div_fp(a, b), c), d);
+  int d = int_to_fp (t->nice);
+  int r = add_fp (mult_fp (div_fp (a, b), c), d);
   t->recent_cpu = r;
 }
 
 int ready_count ()
 {
-int n = 0;
-struct list_elem *e;
-for (e = list_begin (&ready_list); e != list_end (&ready_list);
+  int n = 0;
+  struct list_elem *e;
+  for (e = list_begin (&ready_list); e != list_end (&ready_list);
        e = list_next (e))
-    {
-n++;
+    n++;
+  n -= thread_current () == idle_thread;
+  return n + 1;
 }
-n -= thread_current () == idle_thread;
-return n + 1;
-}
+
 void mlfqs_load_avg (void)
 {
- int a = div_fp(int_to_fp(59), int_to_fp(60));
+ int a = div_fp (int_to_fp (59), int_to_fp (60));
  int b = load_avg;
- int c = div_fp(int_to_fp(1), int_to_fp(60));
-int d = int_to_fp(ready_count());
+ int c = div_fp (int_to_fp (1), int_to_fp (60));
+ int d = int_to_fp(ready_count ());
 
-	load_avg = add_fp(mult_fp(a, b), mult_fp(c, d));
+ load_avg = add_fp(mult_fp (a, b), mult_fp (c, d));
 
-  if (load_avg < 0)
-  {
-    load_avg = 0;
-  }
+ if (load_avg < 0)
+  load_avg = 0;
 }
 
 void mlfqs_increment(void)
 {
-  if (thread_current() == idle_thread) return;
-   thread_current()->recent_cpu = add_mixed(thread_current ()->recent_cpu, 1);
+  if (thread_current () == idle_thread)
+    return;
+  thread_current ()->recent_cpu = add_mixed (thread_current ()->recent_cpu, 1);
 }
 
 void mlfqs_recalc (void)
 {
-struct list_elem *e;
-mlfqs_load_avg();
-for (e = list_begin (&all_list); e != list_end (&all_list);
+  struct list_elem *e;
+  mlfqs_load_avg ();
+  for (e = list_begin (&all_list); e != list_end (&all_list);
        e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, allelem);
-      mlfqs_recent_cpu(t);
-      mlfqs_priority(t);
+      mlfqs_recent_cpu (t);
+      mlfqs_priority (t);
     }
 }
-
-
-
-
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -627,14 +620,19 @@ ready_list_compare (const struct list_elem *a, const struct list_elem *b,
 void
 thread_preempt (void)
 {
+  enum intr_level old_level;
+  old_level = intr_disable ();
+
   // 대기 리스트가 비어 있으면 이 스레드를 제외하고 idle 스레드 하나 뿐입니다.
-  int k = intr_disable();
   if (!list_empty (&ready_list) &&
       thread_current ()->priority
       < list_entry (list_front (&ready_list), struct thread, elem)->priority)
-    // 리스트의 첫 번째 스레드가 이 스레드보다 우선 실행되어야 하므로, 스케줄 반납합니다.
-    intr_set_level(k), thread_yield();
-  intr_set_level(k);
+    {
+      // 리스트의 첫 번째 스레드가 이 스레드보다 우선 실행되어야 하므로, 스케줄 반납합니다.
+      intr_set_level (old_level);
+      thread_yield ();
+    }
+  intr_set_level (old_level);
 }
 
 // 간접적인 경우를 포함하여 이 스레드의 대기 원인이 되는 락을 잡은 모든 스레드에 대하여
@@ -721,10 +719,10 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void)
 {
-intr_disable();
-int r = fp_to_int_round(mult_mixed(load_avg, 100));
-intr_enable();
-return r;
+  intr_disable();
+  int r = fp_to_int_round(mult_mixed(load_avg, 100));
+  intr_enable();
+  return r;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
