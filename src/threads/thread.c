@@ -435,13 +435,14 @@ thread_exit (void)
   // 지금까지 이 프로세스가 wait하지 않은 모든 자식 프로세스가
   // 이 프로세스와 상관없이 종료될 수 있도록 합니다.
   for (child = list_begin (&thread_current ()->child_list);
-       child != list_end (&thread_current ()->child_list);
-       child = list_next (child))
+       child != list_end (&thread_current ()->child_list); )
     {
       struct thread *t = list_entry (child, struct thread, child_elem);
-      // 더 이상 리스트를 사용하지 않을 것이므로 리스트에서 제거하지는 않습니다.
+      child = list_remove (child);
       sema_up (&t->destroy_sema);
     }
+
+    ASSERT(thread_current()->wait_on_lock == NULL);
 
   // 부모 프로세스의 wait를 재개할 수 있도록 합니다.
   sema_up (&thread_current ()->wait_sema);

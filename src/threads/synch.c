@@ -202,6 +202,22 @@ lock_init (struct lock *lock)
   sema_init (&lock->semaphore, 1);
 }
 
+
+
+
+static bool
+is_thread (struct thread *t)
+{
+  return t != NULL && t->magic == 0xcd6abf4b;
+}
+
+
+
+
+
+
+
+
 /* Acquires LOCK, sleeping until it becomes available if
    necessary.  The lock must not already be held by the current
    thread.
@@ -218,26 +234,33 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+int k ;
   t = thread_current ();
+      k = intr_disable();
   if (thread_mlfqs == false)
     {
       // 대기해야 하는지 미리 검사합니다.
       if (lock_try_acquire (lock))
+      {
+        intr_set_level(k);
         return;
+      }
 
       // 실행 흐름이 여기에 도달하였다면 락을 얻기 위해 대기해야 합니다.
-      t->wait_on_lock = lock;
       // 이 스레드의 대기 원인이 되는 락입니다.
       t->wait_on_lock = lock;
+      
       // 그 락을 잡고 있는 스레드의 목록에 이 스레드를 삽입합니다.
       list_push_back (&lock->holder->donations, &t->donation_elem);
       // 우선순위 기부를 수행합니다.
       donate_priority (t);
+
     }
   sema_down (&lock->semaphore);
 
   t->wait_on_lock = NULL;
   lock->holder = thread_current ();
+      intr_set_level(k);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -251,12 +274,16 @@ lock_try_acquire (struct lock *lock)
 {
   bool success;
 
+  int k = intr_disable();
+
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
 
   success = sema_try_down (&lock->semaphore);
   if (success)
     lock->holder = thread_current ();
+
+  intr_set_level(k);
   return success;
 }
 
@@ -271,6 +298,8 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  int k = intr_disable();
+
   lock->holder = NULL;
 
   if (thread_mlfqs == false)
@@ -284,6 +313,7 @@ lock_release (struct lock *lock)
       refresh_priority (thread_current (), &thread_current ()->priority);
     }
   sema_up (&lock->semaphore);
+  intr_set_level(k);
 }
 
 /* Returns true if the current thread holds LOCK, false
