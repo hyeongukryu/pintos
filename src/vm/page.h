@@ -6,6 +6,13 @@
 #include <list.h>
 #include <hash.h>
 
+enum vm_type
+  {
+    VM_ANON,
+    VM_FILE,
+    VM_BIN
+  };
+
 struct vm_entry
   {
     uint8_t type;

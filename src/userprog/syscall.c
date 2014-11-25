@@ -13,6 +13,7 @@
 #include "userprog/pagedir.h"
 #include "filesys/file.h"
 #include "devices/input.h"
+#include "vm/page.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -50,9 +51,12 @@ syscall_init (void)
 static inline void
 check_address (void *addr)
 {
-  // 유저 영역 주소인지 확인한 다음, 할당된 페이지에 대한 주소인지 확인합니다.
-  if ((is_user_vaddr (addr) && addr >= (void *)0x08048000UL &&
-       pagedir_get_page (thread_current ()->pagedir, addr)) == false)
+  // 유저 영역 주소인지 확인한 다음, 올바른 가상 주소인지 확인합니다.
+  if (!(
+        is_user_vaddr (addr) &&
+        addr >= (void *)0x08048000UL &&
+        find_vme (addr)
+      ))
     exit (-1);
 }
 

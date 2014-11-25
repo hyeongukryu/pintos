@@ -271,6 +271,8 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
+  vm_init (&t->vm);
+
   // 파일 디스크립터 테이블을 할당하고 초기화합니다.
   // 이 테이블을 초과하면 어떻게 될지는 생각하지 않기로 합니다.
   t->fd_table = palloc_get_page (PAL_ZERO);
