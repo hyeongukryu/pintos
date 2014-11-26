@@ -427,7 +427,7 @@ mmap (int fd, void *addr)
     return -1;
   if (is_user_vaddr (addr) == false)
     return -1;
-  mmap_file = (struct mmap_file *)malloc(sizeof (struct mmap_file));
+  mmap_file = (struct mmap_file *)malloc (sizeof (struct mmap_file));
   if (mmap_file == NULL)
     return -1;
   memset (mmap_file, 0, sizeof(struct mmap_file));
@@ -444,7 +444,7 @@ mmap (int fd, void *addr)
       if (find_vme (addr))
         return -1;
 
-      struct vm_entry *vme = (struct vm_entry *)malloc(sizeof (struct vm_entry));
+      struct vm_entry *vme = (struct vm_entry *)malloc (sizeof (struct vm_entry));
       memset (vme, 0, sizeof (struct vm_entry));
       vme->type = VM_FILE;
       vme->writable = true;

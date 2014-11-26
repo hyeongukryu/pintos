@@ -440,7 +440,7 @@ thread_exit (void)
       sema_up (&t->destroy_sema);
     }
 
-    ASSERT(thread_current()->wait_on_lock == NULL);
+  ASSERT (thread_current()->wait_on_lock == NULL);
 
   // 부모 프로세스의 wait를 재개할 수 있도록 합니다.
   sema_up (&thread_current ()->wait_sema);

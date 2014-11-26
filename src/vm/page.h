@@ -5,6 +5,7 @@
 #include <debug.h>
 #include <list.h>
 #include <hash.h>
+#include "threads/palloc.h"
 
 enum vm_type
   {
@@ -19,6 +20,14 @@ struct mmap_file
     struct file *file;
     struct list_elem elem;
     struct list vme_list;
+  };
+
+struct page
+  {
+    void *kaddr;
+    struct vm_entry *vme;
+    struct thread *thread;
+    struct list_elem lru;
   };
 
 struct vm_entry
@@ -45,5 +54,9 @@ bool insert_vme (struct hash *, struct vm_entry *);
 bool delete_vme (struct hash *, struct vm_entry *);
 
 bool load_file (void *kaddr, struct vm_entry *);
+
+struct page *alloc_page (enum palloc_flags);
+void free_page (void *);
+void __free_page (struct page *);
 
 #endif

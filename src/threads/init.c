@@ -31,6 +31,8 @@
 #else
 #include "tests/threads/tests.h"
 #endif
+#include "vm/swap.h"
+#include "vm/frame.h"
 #ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
@@ -114,6 +116,9 @@ main (void)
   exception_init ();
   syscall_init ();
 #endif
+
+  swap_init (8 * 1024);
+  lru_list_init ();
 
   /* Start thread scheduler and enable interrupts. */
   thread_start ();

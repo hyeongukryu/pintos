@@ -17,6 +17,9 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/page.h"
+#include "vm/swap.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -604,39 +607,38 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
-  uint8_t *kpage;
+  struct page *kpage;
   void *upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = alloc_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL)
     {
-      success = install_page (upage, kpage, true);
+      success = install_page (upage, kpage->kaddr, true);
       if (success)
         {
-          struct vm_entry *vme;
-          vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
-          if (vme == NULL)
+          kpage->vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+          if (kpage->vme == NULL)
             {
               success = false;
-              palloc_free_page (kpage);
+              free_page (kpage);
             }
-            else
+          else
             {
               *esp = PHYS_BASE;
 
-              memset (vme, 0, sizeof (struct vm_entry));
-              vme->type = VM_ANON;
-              vme->vaddr = upage;
-              vme->writable = true;
-              vme->is_loaded = true;
+              memset (kpage->vme, 0, sizeof (struct vm_entry));
+              kpage->vme->type = VM_ANON;
+              kpage->vme->vaddr = upage;
+              kpage->vme->writable = true;
+              kpage->vme->is_loaded = true;
 
-              insert_vme (&thread_current ()->vm, vme);
+              insert_vme (&thread_current ()->vm, kpage->vme);
             }          
         }
       else
         {
-          palloc_free_page (kpage);
+          free_page (kpage);
         }
     }
   return success;
@@ -665,23 +667,38 @@ install_page (void *upage, void *kpage, bool writable)
 bool
 handle_mm_fault (struct vm_entry *vme)
 {
-  uint8_t *kpage;
+  struct page *kpage;
+  kpage = alloc_page (PAL_USER);
+  ASSERT (kpage != NULL);
+  ASSERT (pg_ofs (kpage->kaddr) == 0);
+  ASSERT (vme != NULL);
+  kpage->vme = vme;
+
   switch (vme->type)
     {
       case VM_BIN:
       case VM_FILE:
-        kpage = palloc_get_page (PAL_USER);
-        if (kpage == NULL)
-          return false;
-        if (!load_file (kpage, vme) ||
-            !install_page (vme->vaddr, kpage, vme->writable))
+        if (!load_file (kpage->kaddr, vme) ||
+            !install_page (vme->vaddr, kpage->kaddr, vme->writable))
           {
-            palloc_free_page (kpage);
+            free_page (kpage);
             return false;
           }
+        vme->is_loaded = true;
+        return true;
+      case VM_ANON:
+      printf("%d %p 1\n", vme->swap_slot, kpage->kaddr);
+        swap_in (vme->swap_slot, kpage->kaddr);
+              printf("%d %p 2\n", vme->swap_slot, kpage->kaddr);
+        if (!install_page (vme->vaddr, kpage->kaddr, vme->writable))
+          {
+            free_page (kpage);
+            return false; 
+          }
+        vme->is_loaded = true;
         return true;
       default:
-        return false;
+        NOT_REACHED ();
     }
 }
 
@@ -712,14 +729,15 @@ do_mummap (struct mmap_file *mmap_file)
        e != list_end (&mmap_file->vme_list); )
     {
       struct vm_entry *vme = list_entry (e, struct vm_entry, mmap_elem);
-      if (pagedir_is_dirty(thread_current ()->pagedir, vme->vaddr))
+      if (vme->is_loaded &&
+          pagedir_is_dirty(thread_current ()->pagedir, vme->vaddr))
         {
           if (file_write_at (vme->file, vme->vaddr, vme->read_bytes, vme->offset)
-              != vme->read_bytes)
-            {
+              != (int) vme->read_bytes)
               NOT_REACHED ();
-            }
+          free_page (pagedir_get_page (thread_current ()->pagedir, vme->vaddr));
         }
+      vme->is_loaded = false;
       e = list_remove (e);
       delete_vme (&thread_current()->vm, vme);
     }
