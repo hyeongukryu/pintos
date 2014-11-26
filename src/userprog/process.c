@@ -189,6 +189,14 @@ process_exit (void)
     // 이미 닫힌 경우에도 안전합니다.
     file_close (cur->fd_table[cur->next_fd]);
 
+  int mapid;
+  for (mapid = 1; mapid < cur->next_mapid; mapid++)
+    {
+      struct mmap_file *mmap_file = find_mmap_file (mapid);
+      if (mmap_file)
+        do_mummap (mmap_file);
+    }
+
   // 파일 디스크립터 테이블을 해제합니다.
   cur->fd_table += 2;
   palloc_free_page (cur->fd_table);
@@ -658,16 +666,63 @@ bool
 handle_mm_fault (struct vm_entry *vme)
 {
   uint8_t *kpage;
-  if (vme->type != VM_BIN)
-    return false;
-  kpage = palloc_get_page (PAL_USER);
-  if (kpage == NULL)
-    return false;
-  if (!load_file (kpage, vme) ||
-      !install_page (vme->vaddr, kpage, vme->writable))
+  switch (vme->type)
     {
-      palloc_free_page (kpage);
-      return false;
+      case VM_BIN:
+      case VM_FILE:
+        kpage = palloc_get_page (PAL_USER);
+        if (kpage == NULL)
+          return false;
+        if (!load_file (kpage, vme) ||
+            !install_page (vme->vaddr, kpage, vme->writable))
+          {
+            palloc_free_page (kpage);
+            return false;
+          }
+        return true;
+      default:
+        return false;
     }
-  return true;
+}
+
+struct mmap_file *
+find_mmap_file (int mapid)
+{
+  struct list_elem *e;
+  for (e = list_begin (&thread_current ()->mmap_list);
+       e != list_end (&thread_current ()->mmap_list);
+       e = list_next (e))
+    {
+      struct mmap_file *f = list_entry (e, struct mmap_file, elem);
+      // 같은 것을 찾았으면 바로 반환합니다.
+      if (f->mapid == mapid)
+        return f;
+    }
+  // 찾지 못했습니다.
+  return NULL; 
+}
+
+void
+do_mummap (struct mmap_file *mmap_file)
+{
+  ASSERT (mmap_file != NULL);
+
+  struct list_elem *e;
+  for (e = list_begin (&mmap_file->vme_list);
+       e != list_end (&mmap_file->vme_list); )
+    {
+      struct vm_entry *vme = list_entry (e, struct vm_entry, mmap_elem);
+      if (pagedir_is_dirty(thread_current ()->pagedir, vme->vaddr))
+        {
+          if (file_write_at (vme->file, vme->vaddr, vme->read_bytes, vme->offset)
+              != vme->read_bytes)
+            {
+              NOT_REACHED ();
+            }
+        }
+      e = list_remove (e);
+      delete_vme (&thread_current()->vm, vme);
+    }
+  list_remove (&mmap_file->elem);
+  free (mmap_file);
 }

@@ -71,14 +71,17 @@ delete_vme (struct hash *vm, struct vm_entry *vme)
 {
   ASSERT (vm != NULL);
   ASSERT (vme != NULL);
-  return !!hash_delete (vm, &vme->elem);
+  if (!hash_delete (vm, &vme->elem))
+    return false;
+  free (vme);
+  return true;
 }
 
 bool load_file (void *kaddr, struct vm_entry *vme)
 {
   ASSERT (kaddr != NULL);
   ASSERT (vme != NULL);
-  ASSERT (vme->type == VM_BIN);
+  ASSERT (vme->type == VM_BIN || vme->type == VM_FILE);
 
   if (file_read_at (vme->file, kaddr, vme->read_bytes, vme->offset) != (int)vme->read_bytes)
     {

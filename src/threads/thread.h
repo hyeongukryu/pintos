@@ -153,6 +153,10 @@ struct thread
 
     struct hash vm;
 
+    struct list mmap_list;
+
+    int next_mapid;
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

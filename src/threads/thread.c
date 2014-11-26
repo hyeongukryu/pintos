@@ -287,6 +287,9 @@ thread_create (const char *name, int priority,
   // 메모리 절약하기
   t->fd_table -= t->next_fd;
 
+  list_init (&t->mmap_list);
+  t->next_mapid = 1;
+
   // 현재 프로세스의 자식 프로세스 목록에 새 프로세스를 추가합니다.
   list_push_back (&thread_current ()->child_list, &t->child_elem);
 

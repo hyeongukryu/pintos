@@ -13,6 +13,14 @@ enum vm_type
     VM_BIN
   };
 
+struct mmap_file
+  {
+    int mapid;
+    struct file *file;
+    struct list_elem elem;
+    struct list vme_list;
+  };
+
 struct vm_entry
   {
     uint8_t type;
@@ -37,6 +45,5 @@ bool insert_vme (struct hash *, struct vm_entry *);
 bool delete_vme (struct hash *, struct vm_entry *);
 
 bool load_file (void *kaddr, struct vm_entry *);
-
 
 #endif

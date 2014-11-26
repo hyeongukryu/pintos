@@ -32,6 +32,9 @@ static int write (int, const void *, unsigned);
 static void seek (int, unsigned);
 static unsigned tell (int);
 static void close (int);
+static int mmap (int, void *);
+static void mummap (int);
+
 
 // 파일 작업 락입니다.
 // 파일 읽기 또는 쓰기 작업을 수행할 때 사용해야 합니다.
@@ -56,7 +59,7 @@ check_address (void *addr)
         is_user_vaddr (addr) &&
         addr >= (void *)0x08048000UL &&
         find_vme (addr)
-      ))
+     ))
     exit (-1);
 }
 
@@ -255,7 +258,13 @@ syscall_handler (struct intr_frame *f)
         close ((int) args[0]);
         break;
       case SYS_MMAP:
+        get_arguments (f->esp, args, 2);
+        f->eax = mmap ((int) args[0], (void *) args[1]);
+        break;
       case SYS_MUNMAP:
+        get_arguments (f->esp, args, 1);
+        mummap ((int) args[0]);
+        break;
       case SYS_CHDIR:
       case SYS_MKDIR:
       case SYS_READDIR:
@@ -406,4 +415,59 @@ static void
 close (int fd)
 { 
   process_close_file (fd);
+}
+
+static int
+mmap (int fd, void *addr)
+{
+  struct mmap_file *mmap_file;
+  size_t offset = 0;
+
+  if (pg_ofs (addr) != 0 || !addr)
+    return -1;
+  if (is_user_vaddr (addr) == false)
+    return -1;
+  mmap_file = (struct mmap_file *)malloc(sizeof (struct mmap_file));
+  if (mmap_file == NULL)
+    return -1;
+  memset (mmap_file, 0, sizeof(struct mmap_file));
+  list_init (&mmap_file->vme_list);
+  if (!(mmap_file->file = process_get_file (fd)))
+    return -1;
+  mmap_file->file = file_reopen(mmap_file->file);
+  mmap_file->mapid = thread_current ()->next_mapid++;
+  list_push_back (&thread_current ()->mmap_list, &mmap_file->elem);
+
+  int length = file_length (mmap_file->file);
+  while (length > 0)
+    {
+      if (find_vme (addr))
+        return -1;
+
+      struct vm_entry *vme = (struct vm_entry *)malloc(sizeof (struct vm_entry));
+      memset (vme, 0, sizeof (struct vm_entry));
+      vme->type = VM_FILE;
+      vme->writable = true;
+      vme->vaddr = addr;
+      vme->offset = offset;
+      vme->read_bytes = length < PGSIZE ? length : PGSIZE;
+      vme->zero_bytes = 0;
+      vme->file = mmap_file->file;
+
+      list_push_back (&mmap_file->vme_list, &vme->mmap_elem);
+      insert_vme (&thread_current ()->vm, vme);
+      addr += PGSIZE;
+      offset += PGSIZE;
+      length -= PGSIZE;
+    }
+  return mmap_file->mapid;
+}
+
+static void
+mummap (int mapid)
+{
+  struct mmap_file *f = find_mmap_file (mapid);
+  if (!f)
+    return;
+  do_mummap (f);
 }
