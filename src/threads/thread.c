@@ -88,6 +88,13 @@ static tid_t allocate_tid (void);
 static bool ready_list_compare (const struct list_elem *,
                                 const struct list_elem *, void *);
 
+void mlfqs_priority (struct thread *t);
+void mlfqs_recent_cpu (struct thread *t);
+int ready_count (void);
+void mlfqs_load_avg (void);
+void mlfqs_increment(void);
+void mlfqs_recalc (void);
+
 void mlfqs_priority (struct thread *t)
 {
   if (t == idle_thread)
@@ -112,7 +119,7 @@ void mlfqs_recent_cpu (struct thread *t)
   t->recent_cpu = r;
 }
 
-int ready_count ()
+int ready_count (void)
 {
   int n = 0;
   struct list_elem *e;

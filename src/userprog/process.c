@@ -208,12 +208,12 @@ process_exit (void)
   // 파일을 닫는 과정에서 쓰기 금지 해제가 이루어집니다.
   file_close (cur->run_file);
 
-  vm_destory (&cur->vm);
+  vm_destroy (&cur->vm);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
-  if (pd != NULL) 
+  if (pd != NULL)
     {
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
@@ -611,37 +611,33 @@ setup_stack (void **esp)
   void *upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
   bool success = false;
 
+  struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+  if (vme == NULL)
+    return false;
+
   kpage = alloc_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL)
     {
-      success = install_page (upage, kpage->kaddr, true);
-      if (success)
-        {
-          kpage->vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
-          if (kpage->vme == NULL)
-            {
-              success = false;
-              free_page (kpage);
-            }
-          else
-            {
-              *esp = PHYS_BASE;
+      kpage->vme = vme;
+      add_page_to_lru_list (kpage);
 
-              memset (kpage->vme, 0, sizeof (struct vm_entry));
-              kpage->vme->type = VM_ANON;
-              kpage->vme->vaddr = upage;
-              kpage->vme->writable = true;
-              kpage->vme->is_loaded = true;
-
-              insert_vme (&thread_current ()->vm, kpage->vme);
-            }          
-        }
-      else
+      if (!install_page (upage, kpage->kaddr, true))
         {
-          free_page (kpage);
+          free_page_kaddr (kpage);
+          free (vme);
+          return false;
         }
+      *esp = PHYS_BASE;
+
+      memset (kpage->vme, 0, sizeof (struct vm_entry));
+      kpage->vme->type = VM_ANON;
+      kpage->vme->vaddr = upage;
+      kpage->vme->writable = true;
+      kpage->vme->is_loaded = true;
+
+      insert_vme (&thread_current ()->vm, kpage->vme);
     }
-  return success;
+    return true;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
@@ -681,21 +677,24 @@ handle_mm_fault (struct vm_entry *vme)
         if (!load_file (kpage->kaddr, vme) ||
             !install_page (vme->vaddr, kpage->kaddr, vme->writable))
           {
-            free_page (kpage);
+            NOT_REACHED ();
+            free_page_kaddr (kpage);
             return false;
           }
         vme->is_loaded = true;
+        add_page_to_lru_list (kpage);
         return true;
       case VM_ANON:
-      printf("%d %p 1\n", vme->swap_slot, kpage->kaddr);
         swap_in (vme->swap_slot, kpage->kaddr);
-              printf("%d %p 2\n", vme->swap_slot, kpage->kaddr);
+        ASSERT (pg_ofs (kpage->kaddr) == 0);
         if (!install_page (vme->vaddr, kpage->kaddr, vme->writable))
           {
-            free_page (kpage);
+            NOT_REACHED ();
+            free_page_kaddr (kpage);
             return false; 
           }
         vme->is_loaded = true;
+        add_page_to_lru_list (kpage);
         return true;
       default:
         NOT_REACHED ();
@@ -735,7 +734,7 @@ do_mummap (struct mmap_file *mmap_file)
           if (file_write_at (vme->file, vme->vaddr, vme->read_bytes, vme->offset)
               != (int) vme->read_bytes)
               NOT_REACHED ();
-          free_page (pagedir_get_page (thread_current ()->pagedir, vme->vaddr));
+          free_page_vaddr (vme->vaddr);
         }
       vme->is_loaded = false;
       e = list_remove (e);

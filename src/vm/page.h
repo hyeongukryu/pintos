@@ -7,6 +7,8 @@
 #include <hash.h>
 #include "threads/palloc.h"
 
+extern struct lock lru_list_lock;
+
 enum vm_type
   {
     VM_ANON,
@@ -47,7 +49,7 @@ struct vm_entry
   };
 
 void vm_init (struct hash *);
-void vm_destory (struct hash *);
+void vm_destroy (struct hash *);
 
 struct vm_entry *find_vme (void *vaddr);
 bool insert_vme (struct hash *, struct vm_entry *);
@@ -57,6 +59,7 @@ bool load_file (void *kaddr, struct vm_entry *);
 
 struct page *alloc_page (enum palloc_flags);
 void free_page (void *);
+void free_page_thread (struct thread *);
 void __free_page (struct page *);
 
 #endif

@@ -19,7 +19,7 @@ void vm_init (struct hash *vm)
   hash_init (vm, vm_hash_func, vm_less_func, NULL);
 }
 
-void vm_destory (struct hash *vm)
+void vm_destroy (struct hash *vm)
 {
   ASSERT (vm != NULL);
   hash_destroy (vm, vm_destroy_func);
@@ -46,7 +46,10 @@ static void
 vm_destroy_func (struct hash_elem *e, void *aux UNUSED)
 {
   ASSERT (e != NULL);
-  free (hash_entry (e, struct vm_entry, elem));
+  struct vm_entry *vme = hash_entry (e, struct vm_entry, elem);
+  free_page_vaddr (vme->vaddr);
+  swap_clear (vme->swap_slot);
+  free (vme);
 }
 
 struct vm_entry *
@@ -79,6 +82,8 @@ delete_vme (struct hash *vm, struct vm_entry *vme)
   ASSERT (vme != NULL);
   if (!hash_delete (vm, &vme->elem))
     return false;
+  free_page_vaddr (vme->vaddr);
+  swap_clear (vme->swap_slot);
   free (vme);
   return true;
 }
@@ -89,21 +94,26 @@ bool load_file (void *kaddr, struct vm_entry *vme)
   ASSERT (vme != NULL);
   ASSERT (vme->type == VM_BIN || vme->type == VM_FILE);
 
-  intr_enable ();
-  if (file_read_at (vme->file, kaddr, vme->read_bytes, vme->offset) != (int)vme->read_bytes)
+  if (file_read_at (vme->file, kaddr, vme->read_bytes, vme->offset) != (int) vme->read_bytes)
     {
       return false;
     }
-  intr_disable ();
+
   memset (kaddr + vme->read_bytes, 0, vme->zero_bytes);
   return true;
 }
 
 static void collect (void)
 {
+  lock_acquire (&lru_list_lock);
   struct page *victim = get_victim ();
+  
+  ASSERT (victim != NULL);
+  ASSERT (victim->thread != NULL);
+  ASSERT (victim->thread->magic == 0xcd6abf4b);
+  ASSERT (victim->vme != NULL);
+
   bool dirty = pagedir_is_dirty (victim->thread->pagedir, victim->vme->vaddr);
-  pagedir_clear_page (victim->thread->pagedir, victim->vme->vaddr);
   switch (victim->vme->type)
     {
       case VM_BIN:
@@ -116,7 +126,8 @@ static void collect (void)
       case VM_FILE:
         if (dirty)
           {
-            if (file_write_at (victim->vme->file, victim->vme->vaddr, victim->vme->read_bytes, victim->vme->offset)
+            if (file_write_at (victim->vme->file, victim->vme->vaddr,
+                               victim->vme->read_bytes, victim->vme->offset)
               != (int) victim->vme->read_bytes)
               NOT_REACHED ();
           }
@@ -128,9 +139,8 @@ static void collect (void)
         NOT_REACHED ();
     }
   victim->vme->is_loaded = false;
-  palloc_free_page (victim->kaddr);
-  free (victim);
-  // __free_page (victim);
+  __free_page(victim);
+  lock_release (&lru_list_lock);
 }
 
 struct page *
@@ -142,46 +152,49 @@ alloc_page (enum palloc_flags flags)
     return NULL;
   memset (page, 0, sizeof (struct page));
   page->thread = thread_current ();
+  ASSERT (page->thread);
+  ASSERT (page->thread->magic == 0xcd6abf4b);
   page->kaddr = palloc_get_page (flags);
   while (page->kaddr == NULL)
     {
       collect ();
       page->kaddr = palloc_get_page (flags);
     }
-  add_page_to_lru_list (page);
-
   return page;
 }
 
 extern struct list lru_list;
-extern struct list_elem *lru_clock;
 
 void
-free_page (void *kaddr)
+free_page_kaddr (void *kaddr)
 {
-  enum intr_level old_level;
-  old_level = intr_disable ();
+  lock_acquire (&lru_list_lock);
 
   struct page *page = find_page_from_lru_list (kaddr);
-  __free_page(page);
+  if (page)
+    __free_page(page);
 
-  intr_set_level (old_level);
+  lock_release (&lru_list_lock);
+}
+
+void
+free_page_vaddr (void *vaddr)
+{
+  free_page_kaddr (pagedir_get_page (thread_current ()->pagedir, vaddr));
 }
 
 void
 __free_page (struct page *page)
 {
-  enum intr_level old_level;
-  old_level = intr_disable ();
+  ASSERT (lock_held_by_current_thread (&lru_list_lock));
 
   ASSERT (page != NULL);
   ASSERT (page->thread != NULL);
+  ASSERT (page->thread->magic == 0xcd6abf4b);
   ASSERT (page->vme != NULL);
 
   pagedir_clear_page (page->thread->pagedir, page->vme->vaddr);
   del_page_from_lru_list (page);
   palloc_free_page (page->kaddr);
   free (page);
-
-  intr_set_level (old_level);
 }

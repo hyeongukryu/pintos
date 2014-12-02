@@ -335,8 +335,12 @@ remove (const char *file)
 static int
 open (const char *file)
 {
+  int result = -1;
+  lock_acquire (&file_lock);
   // process_add_file는 NULL에서 -1 반환하므로 안전합니다.
-  return process_add_file (filesys_open (file));
+  result = process_add_file (filesys_open (file));
+  lock_release (&file_lock);
+  return result;
 }
 
 static int

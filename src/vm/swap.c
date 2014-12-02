@@ -5,46 +5,52 @@
 #include "threads/vaddr.h"
 #include "threads/interrupt.h"
 
-struct lock swap_lock;
+extern struct lock file_lock;
 struct bitmap *swap_bitmap;
 
 void
 swap_init (size_t size)
 {
-  lock_init (&swap_lock);
   swap_bitmap = bitmap_create (size);
 }
 
 void
 swap_in (size_t used_index, void *kaddr)
 {
-  ASSERT (pg_ofs (kaddr) == 0);
+  if (used_index-- == 0)
+    NOT_REACHED ();
 
-  enum intr_level old_level = intr_enable ();
-  lock_acquire (&swap_lock);
+  lock_acquire (&file_lock);
+  ASSERT (pg_ofs (kaddr) == 0);
 
   used_index <<= 3;
   struct block *block = block_get_role (BLOCK_SWAP);
 
   int i;
-  ASSERT (pg_ofs (kaddr) == 0);
   for (i = 0; i < 8; i++)
     block_read (block, used_index + i, kaddr + BLOCK_SECTOR_SIZE * i);
   used_index >>= 3;
 
   bitmap_set_multiple (swap_bitmap, used_index, 1, false);
   ASSERT (pg_ofs (kaddr) == 0);
-  lock_release (&swap_lock);
-  intr_set_level (old_level);
+
+  lock_release (&file_lock);
+}
+
+void swap_clear (size_t used_index)
+{
+  if (used_index-- == 0)
+    return;
+  lock_acquire (&file_lock);
+  bitmap_set_multiple (swap_bitmap, used_index, 1, false);
+  lock_release (&file_lock);
 }
 
 size_t
 swap_out (void *kaddr)
 {
+  lock_acquire (&file_lock);
   ASSERT (pg_ofs (kaddr) == 0);
-
-  enum intr_level old_level = intr_enable ();
-  lock_acquire (&swap_lock);
 
   size_t swap_index;
   swap_index = bitmap_scan_and_flip (swap_bitmap, 0, 1, false);
@@ -56,14 +62,14 @@ swap_out (void *kaddr)
 
   struct block *block = block_get_role (BLOCK_SWAP);
   swap_index <<= 3;
+
   int i;
-  ASSERT (pg_ofs (kaddr) == 0);
   for (i = 0; i < 8; i++)
     block_write (block, swap_index + i, kaddr + BLOCK_SECTOR_SIZE * i);
   swap_index >>= 3;
 
-  lock_release (&swap_lock);
-  intr_set_level (old_level);
   ASSERT (pg_ofs (kaddr) == 0);
-  return swap_index;
+
+  lock_release (&file_lock);
+  return swap_index + 1;
 }
