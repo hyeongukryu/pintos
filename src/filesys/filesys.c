@@ -22,7 +22,9 @@ filesys_init (bool format)
   if (fs_device == NULL)
     PANIC ("No file system device found, can't initialize file system.");
 
+  // 버퍼 캐시 초기화
   bc_init ();
+
   inode_init ();
   free_map_init ();
 
@@ -38,6 +40,8 @@ void
 filesys_done (void) 
 {
   free_map_close ();
+
+  // 버퍼 캐시 종료
   bc_term ();
 }
 
