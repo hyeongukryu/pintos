@@ -7,6 +7,7 @@
 #include "userprog/syscall.h"
 #include "userprog/process.h"
 #include "vm/page.h"
+#include "threads/vaddr.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -123,7 +124,7 @@ kill (struct intr_frame *f)
    description of "Interrupt 14--Page Fault Exception (#PF)" in
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void
-page_fault (struct intr_frame *f) 
+page_fault (struct intr_frame *f)
 {
   bool not_present;  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
@@ -156,7 +157,12 @@ page_fault (struct intr_frame *f)
     exit (-1);
   vme = find_vme (fault_addr);
   if (!vme)
-    exit (-1);
+    {
+      if (!verify_stack ((int32_t) fault_addr, f->esp))
+        exit (-1);
+      expand_stack (fault_addr);
+      return;
+    }
   if (!handle_mm_fault (vme))
     exit (-1);
 
@@ -169,4 +175,11 @@ page_fault (struct intr_frame *f)
   //         write ? "writing" : "reading",
   //         user ? "user" : "kernel");
   // kill (f);
+}
+
+bool
+verify_stack (int32_t addr, int32_t esp)
+{
+  return is_user_vaddr (addr) && esp - addr <= 32
+      && 0xC0000000UL - addr <= 8 * 1024 * 1024;
 }

@@ -609,7 +609,6 @@ setup_stack (void **esp)
 {
   struct page *kpage;
   void *upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
-  bool success = false;
 
   struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
   if (vme == NULL)
@@ -742,4 +741,37 @@ do_mummap (struct mmap_file *mmap_file)
     }
   list_remove (&mmap_file->elem);
   free (mmap_file);
+}
+
+void
+expand_stack (void *addr)
+{
+  struct page *kpage;
+  void *upage = pg_round_down (addr);
+
+  struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+  if (vme == NULL)
+    return false;
+
+  kpage = alloc_page (PAL_USER | PAL_ZERO);
+  if (kpage != NULL)
+    {
+      kpage->vme = vme;
+      add_page_to_lru_list (kpage);
+
+      if (!install_page (upage, kpage->kaddr, true))
+        {
+          free_page_kaddr (kpage);
+          free (vme);
+          return false;
+        }
+
+      memset (kpage->vme, 0, sizeof (struct vm_entry));
+      kpage->vme->type = VM_ANON;
+      kpage->vme->vaddr = upage;
+      kpage->vme->writable = true;
+      kpage->vme->is_loaded = true;
+
+      insert_vme (&thread_current ()->vm, kpage->vme);
+    }
 }

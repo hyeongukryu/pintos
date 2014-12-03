@@ -52,50 +52,56 @@ syscall_init (void)
 // 주소 addr이 유효한 유저 모드 주소가 아니면 프로세스를 종료합니다.
 // 시스템 콜을 안전하게 수행하기 위하여 사용합니다.
 static inline void
-check_address (void *addr)
+check_address (void *addr, void *esp)
 {
   // 유저 영역 주소인지 확인한 다음, 올바른 가상 주소인지 확인합니다.
   if (!(
         is_user_vaddr (addr) &&
-        addr >= (void *)0x08048000UL &&
-        find_vme (addr)
+        addr >= (void *)0x08048000UL
      ))
     exit (-1);
+
+  if (!find_vme (addr))
+    {
+      if (!verify_stack ((int32_t) addr, (int32_t) esp))
+        exit (-1);
+      expand_stack (addr);      
+    }
 }
 
 // 4 바이트 값에 대한 안전한 포인터인지 검사합니다.
 static inline void
-check_address4 (void *addr)
+check_address4 (void *addr, void *esp)
 {
-  check_address (addr);
-  check_address (addr + 3);
+  check_address (addr, esp);
+  check_address (addr + 3, esp);
 }
 
 // 4바이트 인자를 1개에서 4개 사이에서 가져옵니다.
 static inline void
-get_arguments (int32_t *esp, int32_t *args, int count)
+get_arguments (int32_t *esp, int32_t *args, int count, void *esp2)
 {
   ASSERT (1 <= count && count <= 4);
   while (count--)
   {
-    check_address4 (++esp);
+    check_address4 (++esp, esp2);
     *(args++) = *esp;
   }
 }
 
 // 아래 함수와 같으며, 주어진 크기를 가정합니다.
 static inline void
-check_user_string_l (const char *str, unsigned size)
+check_user_string_l (const char *str, unsigned size, void *esp)
 {
   while (size--)
-    check_address ((void *) (str++));  
+    check_address ((void *) (str++), esp);  
 }
 
 // 널 문자로 종료되는 사용자 문자열의 유효성을 확인합니다.
 static inline void
-check_user_string (const char *str)
+check_user_string (const char *str, void *esp)
 {
-  for (; check_address ((void *) str), *str; str++);
+  for (; check_address ((void *) str, esp), *str; str++);
 }
 
 // 아래 함수와 같으며, 주어진 크기를 가정합니다.
@@ -163,22 +169,22 @@ get_single_user_string (char **args, int flag, int index)
 // 플래그가 맞을 때 사용자 문자열의 유효성을 확인합니다.
 // 유효하지 않으면 종료합니다.
 static inline void
-check_single_user_string (char **args, int flag, int index)
+check_single_user_string (char **args, int flag, int index, int32_t esp)
 {
   if (flag & (0b1000 >> index))
-    check_user_string (args[index]);
+    check_user_string (args[index], esp);
 }
 
 // 플래그의 마지막 4비트에 따라서 사용자 문자열을 확인하고 가져옵니다.
 // 새로운 메모리를 동적 할당합니다. 
 static inline void
-get_user_strings (char **args, int flag)
+get_user_strings (char **args, int flag, void *esp)
 {
   ASSERT (0 <= flag && flag <= 0b1111);
-  check_single_user_string (args, flag, 0);
-  check_single_user_string (args, flag, 1);
-  check_single_user_string (args, flag, 2);
-  check_single_user_string (args, flag, 3);
+  check_single_user_string (args, flag, 0, esp);
+  check_single_user_string (args, flag, 1, esp);
+  check_single_user_string (args, flag, 2, esp);
+  check_single_user_string (args, flag, 3, esp);
   get_single_user_string (args, flag, 0);
   get_single_user_string (args, flag, 1);
   get_single_user_string (args, flag, 2);
@@ -186,10 +192,39 @@ get_user_strings (char **args, int flag)
 }
 
 static void
+pin_address (void *addr)
+{
+  struct vm_entry *vme = find_vme (addr);
+  vme->pinned = true;
+  if (vme->is_loaded == false)
+    handle_mm_fault (vme);
+}
+
+static void
+unpin_address (void *addr)
+{
+  find_vme (addr)->pinned = false;
+}
+
+static void
+pin_string (const char *begin, const char *end)
+{
+  for (; begin < end; begin += PGSIZE)
+    pin_address (begin);
+}
+
+static void
+unpin_string (const char *begin, const char *end)
+{
+  for (; begin < end; begin += PGSIZE)
+    unpin_address (begin);
+}
+
+static void
 syscall_handler (struct intr_frame *f)
 {
   int32_t args[4];
-  check_address4 (f->esp);
+  check_address4 (f->esp, f->esp);
 
   switch (*(int *) f->esp)
     {
@@ -197,72 +232,72 @@ syscall_handler (struct intr_frame *f)
         halt ();
         break;
       case SYS_EXIT:
-        get_arguments (f->esp, args, 1);
+        get_arguments (f->esp, args, 1, f->esp);
         exit (args[0]);
         break;
       case SYS_CREATE:
-        get_arguments (f->esp, args, 2);
-        get_user_strings ((char **) args, 0b1000);
+        get_arguments (f->esp, args, 2, f->esp);
+        get_user_strings ((char **) args, 0b1000, f->esp);
         f->eax = create ((const char *) args[0], args[1]);
         free_user_strings ((char **) args, 0b1000);
         break;
       case SYS_REMOVE:
-        get_arguments (f->esp, args, 1);
-        get_user_strings ((char **) args, 0b1000);
+        get_arguments (f->esp, args, 1, f->esp);
+        get_user_strings ((char **) args, 0b1000, f->esp);
         f->eax = remove ((const char *) args[0]);
         free_user_strings ((char **) args, 0b1000); 
         break;
       case SYS_WRITE:
-        get_arguments (f->esp, args, 3);
-        check_user_string_l ((const char *) args[1], (unsigned) args[2]);
+        get_arguments (f->esp, args, 3, f->esp);
+        check_user_string_l ((const char *) args[1], (unsigned) args[2], f->esp);
         args[1] = (int) get_user_string_l ((const char *) args[1], (unsigned) args[2]);
         f->eax = write ((int) args[0], (const void *) args[1], (unsigned) args[2]);
         free ((void *) args[1]);
         args[1] = 0;
         break;
       case SYS_EXEC:
-        get_arguments (f->esp, args, 1);
-        get_user_strings ((char **) args, 0b1000);
+        get_arguments (f->esp, args, 1, f->esp);
+        get_user_strings ((char **) args, 0b1000, f->esp);
         f->eax = exec ((const char *) args[0]);
         free_user_strings ((char **) args, 0b1000);
         break;
       case SYS_WAIT:
-        get_arguments (f->esp, args, 1);
+        get_arguments (f->esp, args, 1, f->esp);
         f->eax = wait ((tid_t) args[0]);
         break;
       case SYS_OPEN:
-        get_arguments (f->esp, args, 1);
-        get_user_strings ((char **) args, 0b1000);
+        get_arguments (f->esp, args, 1, f->esp);
+        get_user_strings ((char **) args, 0b1000, f->esp);
         f->eax = open ((const char *) args[0]);
         free_user_strings ((char **) args, 0b1000);
         break;
       case SYS_FILESIZE:
-        get_arguments (f->esp, args, 1);
+        get_arguments (f->esp, args, 1, f->esp);
         f->eax = filesize ((int) args[0]);
         break;
       case SYS_READ:
-        get_arguments (f->esp, args, 3);
-        check_user_string_l ((const char *) args[1], (unsigned) args[2]);
+        get_arguments (f->esp, args, 3, f->esp);
+        check_user_string_l ((const char *) args[1], (unsigned) args[2], f->esp);
         f->eax = read ((int) args[0], (void *) args[1], (unsigned) args[2]);
         break;
       case SYS_SEEK:
-        get_arguments (f->esp, args, 2);
+        get_arguments (f->esp, args, 2, f->esp);
         seek ((int) args[0], (unsigned) args[1]);
         break;
       case SYS_TELL:
-        get_arguments (f->esp, args, 1);
+        get_arguments (f->esp, args, 1, f->esp);
         f->eax = tell ((int) args[0]);
         break;
       case SYS_CLOSE:
-        get_arguments (f->esp, args, 1);
+        get_arguments (f->esp, args, 1, f->esp);
         close ((int) args[0]);
         break;
       case SYS_MMAP:
-        get_arguments (f->esp, args, 2);
+        get_arguments (f->esp, args, 2, f->esp);
         f->eax = mmap ((int) args[0], (void *) args[1]);
         break;
       case SYS_MUNMAP:
-        get_arguments (f->esp, args, 1);
+        get_arguments (f->esp, args, 1, f->esp);
         mummap ((int) args[0]);
         break;
       case SYS_CHDIR:
@@ -357,21 +392,27 @@ read (int fd, void *buffer, unsigned size)
 {
   struct file *f;
   lock_acquire (&file_lock);
+  pin_string (buffer, buffer + size);
+  //check_user_string_l (buffer, size, 0);
+
   if (fd == STDIN_FILENO)
   {
     // 표준 입력
     unsigned count = size;
     while (count--)
       *((char *)buffer++) = input_getc();
+    unpin_string (buffer, buffer + size);
     lock_release (&file_lock);  
     return size;
   }
   if ((f = process_get_file (fd)) == NULL)
     {
+      unpin_string (buffer, buffer + size);
       lock_release (&file_lock);
       return -1;
     }
   size = file_read (f, buffer, size);
+  unpin_string (buffer, buffer + size);
   lock_release (&file_lock);
   return size;
 }

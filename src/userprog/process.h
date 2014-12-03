@@ -17,5 +17,6 @@ void process_close_file (int);
 bool handle_mm_fault (struct vm_entry *);
 void do_mummap (struct mmap_file *);
 struct mmap_file *find_mmap_file (int);
+void expand_stack (void *);
 
 #endif /* userprog/process.h */
