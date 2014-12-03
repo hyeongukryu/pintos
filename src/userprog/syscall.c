@@ -192,9 +192,11 @@ get_user_strings (char **args, int flag, void *esp)
 }
 
 static void
-pin_address (void *addr)
+pin_address (void *addr, bool write)
 {
   struct vm_entry *vme = find_vme (addr);
+  if (write && !vme->writable)
+    exit (-1);
   vme->pinned = true;
   if (vme->is_loaded == false)
     handle_mm_fault (vme);
@@ -207,10 +209,10 @@ unpin_address (void *addr)
 }
 
 static void
-pin_string (const char *begin, const char *end)
+pin_string (const char *begin, const char *end, bool write)
 {
   for (; begin < end; begin += PGSIZE)
-    pin_address (begin);
+    pin_address (begin, write);
 }
 
 static void
@@ -392,8 +394,7 @@ read (int fd, void *buffer, unsigned size)
 {
   struct file *f;
   lock_acquire (&file_lock);
-  pin_string (buffer, buffer + size);
-  //check_user_string_l (buffer, size, 0);
+  pin_string (buffer, buffer + size, true);
 
   if (fd == STDIN_FILENO)
   {
