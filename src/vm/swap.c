@@ -15,6 +15,8 @@ swap_init (size_t size)
   swap_bitmap = bitmap_create (size);
 }
 
+extern struct lock file_lock;
+
 void
 swap_in (size_t used_index, void *kaddr)
 {
@@ -24,7 +26,9 @@ swap_in (size_t used_index, void *kaddr)
   if (used_index-- == 0)
     NOT_REACHED ();
 
+  lock_acquire (&file_lock);
   lock_acquire (&swap_lock);
+
   ASSERT (pg_ofs (kaddr) == 0);
 
   used_index <<= 3;
@@ -37,6 +41,7 @@ swap_in (size_t used_index, void *kaddr)
   ASSERT (pg_ofs (kaddr) == 0);
 
   lock_release (&swap_lock);
+  lock_release (&file_lock);
 }
 
 void swap_clear (size_t used_index)
@@ -54,7 +59,9 @@ swap_out (void *kaddr)
   struct block *swap_block;
   swap_block = block_get_role (BLOCK_SWAP);
 
+  lock_acquire (&file_lock);
   lock_acquire (&swap_lock);
+
   ASSERT (pg_ofs (kaddr) == 0);
   size_t swap_index;
   swap_index = bitmap_scan_and_flip (swap_bitmap, 0, 1, false);
@@ -70,6 +77,9 @@ swap_out (void *kaddr)
   swap_index >>= 3;
 
   ASSERT (pg_ofs (kaddr) == 0);
+  
   lock_release (&swap_lock);
+  lock_release (&file_lock);
+
   return swap_index + 1;
 }

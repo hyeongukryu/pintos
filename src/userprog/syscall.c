@@ -393,8 +393,8 @@ static int
 read (int fd, void *buffer, unsigned size)
 {
   struct file *f;
-  lock_acquire (&file_lock);
   pin_string (buffer, buffer + size, true);
+  lock_acquire (&file_lock);
 
   if (fd == STDIN_FILENO)
   {
@@ -402,19 +402,19 @@ read (int fd, void *buffer, unsigned size)
     unsigned count = size;
     while (count--)
       *((char *)buffer++) = input_getc();
+    lock_release (&file_lock);
     unpin_string (buffer, buffer + size);
-    lock_release (&file_lock);  
     return size;
   }
   if ((f = process_get_file (fd)) == NULL)
     {
-      unpin_string (buffer, buffer + size);
       lock_release (&file_lock);
+      unpin_string (buffer, buffer + size);
       return -1;
     }
   size = file_read (f, buffer, size);
-  unpin_string (buffer, buffer + size);
   lock_release (&file_lock);
+  unpin_string (buffer, buffer + size);
   return size;
 }
 
