@@ -302,13 +302,15 @@ syscall_handler (struct intr_frame *f)
         get_arguments (f->esp, args, 1, f->esp);
         mummap ((int) args[0]);
         break;
-      case SYS_CHDIR:
       case SYS_MKDIR:
+        break;
+      case SYS_CHDIR:
       case SYS_READDIR:
       case SYS_ISDIR: 
       case SYS_INUMBER:
         // 시스템 콜 번호는 유효하나 아직 구현되지 않았습니다.
         printf("NotImplemented: %d\n", *(int *)f->esp);
+        break;
       default:
         // 시스템 콜 번호가 유효하지 않습니다.
         exit(-1);
