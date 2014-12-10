@@ -28,6 +28,5 @@ bool bc_write (block_sector_t, void *, off_t, int, int);
 struct buffer_head *bc_lookup (block_sector_t);
 struct buffer_head *bc_select_victim (void);
 void bc_flush_entry (struct buffer_head *);
-bool bc_ok (void);
 
 #endif

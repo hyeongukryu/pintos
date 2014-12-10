@@ -124,7 +124,6 @@ main (void)
   thread_start ();
   serial_init_queue ();
   timer_calibrate ();
-  thread_current();
 
 #ifdef FILESYS
   /* Initialize file system. */
