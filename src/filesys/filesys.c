@@ -79,13 +79,11 @@ filesys_open (const char *path)
 {
   char name[PATH_MAX_LEN + 1];
   struct dir *dir = parse_path (path, name);
-
+  if (dir == NULL)
+    return NULL;
   struct inode *inode = NULL;
-
-  if (dir != NULL)
-    dir_lookup (dir, name, &inode);
+  dir_lookup (dir, name, &inode);
   dir_close (dir);
-
   return file_open (inode);
 }
 
@@ -110,9 +108,9 @@ filesys_remove (const char *path)
     ((cur_dir = dir_open (inode)) && !dir_readdir (cur_dir, temp)))
     success = dir != NULL && dir_remove (dir, name);
   dir_close (dir);
+  
   if (cur_dir)
     dir_close (cur_dir);
-
   return success;
 }
 

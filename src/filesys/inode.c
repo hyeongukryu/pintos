@@ -171,7 +171,10 @@ inode_create (block_sector_t sector, off_t length, uint32_t is_dir)
       // 초기 크기에 따른 첫 파일 크기 확장을 수행합니다.
       disk_inode->length = 0;
       if (!inode_update_file_length (disk_inode, disk_inode->length, length))
-        NOT_REACHED ();
+        {
+          free (disk_inode);
+          return false;
+        }
 
       disk_inode->magic = INODE_MAGIC;
 
@@ -250,6 +253,7 @@ inode_close (struct inode *inode)
   /* Ignore null pointer. */
   if (inode == NULL)
     return;
+  ASSERT ((int)inode->open_cnt > 0);
 
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)

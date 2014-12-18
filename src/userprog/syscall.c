@@ -552,7 +552,6 @@ chdir (char *path_o)
 
   char name[PATH_MAX_LEN + 1];
   struct dir *dir = parse_path (path, name);
-  
   if (!dir)
     return false;
   dir_close (thread_current ()->working_dir);
@@ -587,7 +586,6 @@ readdir (int fd, char *name)
     result = dir_readdir (dir, name);
   if (i <= *pos == false)
     (*pos)++;
-  dir_close (dir);
   return result;
 }
 
