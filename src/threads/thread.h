@@ -148,14 +148,20 @@ struct thread
     // 이 스레드가 sleep_list의 원소일 때, 이 틱 이전에 스레드를 깨우지 않도록 합니다.
     int64_t wakeup_tick;
 
+    // 스케줄링 정보
     int nice;
     int recent_cpu;
 
+    // 가상 메모리 관리 해시 테이블
     struct hash vm;
 
+    // 메모리 매핑된 파일 관리 정보
     struct list mmap_list;
-
     int next_mapid;
+
+    // 작업 디렉터리입니다.
+    struct dir *working_dir;
+
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

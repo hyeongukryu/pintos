@@ -13,7 +13,7 @@
 #define INODE_MAGIC 0x494e4f44
 
 // struct inode_disk의 크기가 BLOCK_SECTOR_SIZE와 같도록 하는 값입니다.
-#define DIRECT_BLOCK_ENTRIES 124
+#define DIRECT_BLOCK_ENTRIES 123
 
 // struct inode_indirect_block의 크기가 BLOCK_SECTOR_SIZE와 같도록 하는 값입니다.
 #define INDIRECT_BLOCK_ENTRIES (BLOCK_SECTOR_SIZE / sizeof (block_sector_t))
@@ -51,6 +51,9 @@ struct inode_disk
   {
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
+
+    // 디렉터리를 나타내면 1, 디렉터리가 아니면 0입니다.
+    uint32_t is_dir;
 
     // 아래에 나열된 순서대로 테이블을 사용합니다.
 
@@ -147,7 +150,7 @@ inode_init (void)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length)
+inode_create (block_sector_t sector, off_t length, uint32_t is_dir)
 {
   struct inode_disk *disk_inode = NULL;
   bool success = false;
@@ -171,6 +174,9 @@ inode_create (block_sector_t sector, off_t length)
         NOT_REACHED ();
 
       disk_inode->magic = INODE_MAGIC;
+
+      // 디렉터리인지, 그렇지 않은지를 지정합니다.
+      disk_inode->is_dir = is_dir;
       
       // 디스크 아이노드를 버퍼 캐시를 통하여 기록합니다.
       bc_write (sector, disk_inode, 0, BLOCK_SECTOR_SIZE, 0);
@@ -297,9 +303,13 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
       // 경쟁적으로 테이블에 접근할 수 있으므로 락을 취득한 상태에서 수행합니다.
       block_sector_t sector_idx = byte_to_sector (&inode_disk, offset);
+      if (sector_idx == (block_sector_t) -1)
+        break;
+
       lock_release (&inode->extend_lock);
 
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
+
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
       off_t inode_left = inode_disk.length - offset;
@@ -420,7 +430,7 @@ inode_allow_write (struct inode *inode)
   inode->deny_write_cnt--;
 }
 
-// 디스크 아이노트 읽기를 위한 간단한 도움 함수입니다.
+// 디스크 아이노드 읽기를 위한 간단한 도움 함수입니다.
 static bool
 get_disk_inode (const struct inode *inode, struct inode_disk *inode_disk)
 {
@@ -659,4 +669,16 @@ inode_length (const struct inode *inode)
   struct inode_disk inode_disk;
   bc_read (inode->sector, &inode_disk, 0, BLOCK_SECTOR_SIZE, 0);
   return inode_disk.length;
+}
+
+// 주어진 아이노드가 디렉터리이면 true, 그렇지 않으면 false를 반환합니다.
+bool
+inode_is_dir (const struct inode *inode)
+{
+  struct inode_disk inode_disk;
+  if (inode->removed)
+    return false;
+  if (!get_disk_inode (inode, &inode_disk))
+    return false;
+  return inode_disk.is_dir;
 }

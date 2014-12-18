@@ -297,6 +297,13 @@ thread_create (const char *name, int priority,
   list_init (&t->mmap_list);
   t->next_mapid = 1;
 
+  // 현재 프로세스의 작업 디렉터리가 NULL이 아니면
+  // 디렉터리를 다시 열어 자식 프로세스의 작업 디렉터리로 합니다.
+  if (thread_current ()->working_dir)
+    {
+      t->working_dir = dir_reopen(thread_current ()->working_dir);
+    }
+
   // 현재 프로세스의 자식 프로세스 목록에 새 프로세스를 추가합니다.
   list_push_back (&thread_current ()->child_list, &t->child_elem);
 
@@ -832,6 +839,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   // 우선순위 관련 정보 초기화
   t->base_priority = t->priority = priority;
+  // 작업 디렉터리 초기 설정
+  t->working_dir = NULL;
+
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 

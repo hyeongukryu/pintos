@@ -210,6 +210,9 @@ process_exit (void)
 
   vm_destroy (&cur->vm);
 
+  // 작업 디렉터리를 닫습니다. NULL인 경우에도 안전합니다.
+  dir_close (cur->working_dir);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;

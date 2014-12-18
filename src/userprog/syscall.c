@@ -7,11 +7,13 @@
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
+#include "filesys/directory.h"
+#include "filesys/file.h"
 #include "threads/malloc.h"
 #include "process.h"
 #include "threads/synch.h"
 #include "userprog/pagedir.h"
-#include "filesys/file.h"
 #include "devices/input.h"
 #include "vm/page.h"
 
@@ -34,6 +36,11 @@ static unsigned tell (int);
 static void close (int);
 static int mmap (int, void *);
 static void mummap (int);
+static bool chdir (char *);
+static bool mkdir (const char *);
+static bool readdir (int, char *);
+static bool isdir (int);
+static int inumber (int);
 
 
 // 파일 작업 락입니다.
@@ -303,13 +310,29 @@ syscall_handler (struct intr_frame *f)
         mummap ((int) args[0]);
         break;
       case SYS_MKDIR:
+        get_arguments (f->esp, args, 1, f->esp);
+        get_user_strings ((char **) args, 0b1000, f->esp);
+        f->eax = mkdir ((const char *) args[0]);
+        free_user_strings ((char **) args, 0b1000);
         break;
       case SYS_CHDIR:
+        get_arguments (f->esp, args, 1, f->esp);
+        get_user_strings ((char **) args, 0b1000, f->esp);
+        f->eax = chdir ((const char *) args[0]);
+        free_user_strings ((char **) args, 0b1000);
+        break;
       case SYS_READDIR:
-      case SYS_ISDIR: 
+        get_arguments (f->esp, args, 2, f->esp);
+        check_user_string_l ((const char *) args[1], READDIR_MAX_LEN + 1, f->esp);
+        f->eax = readdir ((int) args[0], (char *) args[1]);
+        break;
+      case SYS_ISDIR:
+        get_arguments (f->esp, args, 1, f->esp);
+        f->eax = isdir ((int) args[0]);
+        break;
       case SYS_INUMBER:
-        // 시스템 콜 번호는 유효하나 아직 구현되지 않았습니다.
-        printf("NotImplemented: %d\n", *(int *)f->esp);
+        get_arguments (f->esp, args, 1, f->esp);
+        f->eax = inumber ((int) args[0]);
         break;
       default:
         // 시스템 콜 번호가 유효하지 않습니다.
@@ -518,4 +541,73 @@ mummap (int mapid)
   if (!f)
     return;
   do_mummap (f);
+}
+
+static bool
+chdir (char *path_o)
+{
+  char path[PATH_MAX_LEN + 1];
+  strlcpy (path, path_o, PATH_MAX_LEN);
+  strlcat (path, "/0", PATH_MAX_LEN);
+
+  char name[PATH_MAX_LEN + 1];
+  struct dir *dir = parse_path (path, name);
+  
+  if (!dir)
+    return false;
+  dir_close (thread_current ()->working_dir);
+  thread_current ()->working_dir = dir;
+  return true;
+}
+
+static bool
+mkdir (const char *dir)
+{
+  return filesys_create_dir (dir);
+}
+
+static bool
+readdir (int fd, char *name)
+{
+  // 파일 디스크립터를 이용하여 파일을 찾습니다.
+  struct file *f = process_get_file (fd);
+  if (f == NULL)
+    exit (-1);
+  // 내부 아이노드 가져오기 및 디렉터리 열기
+  struct inode *inode = file_get_inode (f);
+  if (!inode || !inode_is_dir (inode))
+    return false;
+  struct dir *dir = dir_open (inode);
+  if (!dir)
+    return false;
+  int i;
+  bool result = true;
+  off_t *pos = (off_t *)f + 1;
+  for (i = 0; i <= *pos && result; i++)
+    result = dir_readdir (dir, name);
+  if (i <= *pos == false)
+    (*pos)++;
+  dir_close (dir);
+  return result;
+}
+
+static bool
+isdir (int fd)
+{
+  // 파일 디스크립터를 이용하여 파일을 찾습니다.
+  struct file *f = process_get_file (fd);
+  if (f == NULL)
+    exit (-1);
+  // 디렉터리인지 계산하여 반환합니다.
+  return inode_is_dir (file_get_inode (f));
+}
+
+static int
+inumber (int fd)
+{
+  // 파일 디스크립터를 이용하여 파일을 찾습니다.
+  struct file *f = process_get_file (fd);
+  if (f == NULL)
+    exit (-1);
+  return inode_get_inumber (file_get_inode (f));
 }
