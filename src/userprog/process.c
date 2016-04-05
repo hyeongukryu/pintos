@@ -117,7 +117,7 @@ start_process (void *aux)
   cmdline = aux;
   t = thread_current ();
 
-  /* Initialize interrupt rame and load executable. */
+  /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
